@@ -11,17 +11,21 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info } from "lucide-react"; // Added Package, Info icons
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info } from "lucide-react";
 
 interface ReturnItem {
   awb: string;
-  productDetails?: string; // Keep as single string, format in display
   suborderId?: string;
+  // Removed productDetails
+  sku?: string; // Added
+  category?: string; // Added
+  qty?: string; // Added
+  size?: string; // Added
   returnReason?: string;
   returnShippingFee?: string | number;
   deliveredOn?: string | number | Date;
   courierPartner?: string;
-  returnType?: string; // Added: RTO or Return
+  returnType?: string;
   received: boolean;
 }
 
@@ -35,6 +39,23 @@ export default function ReturnVerification() {
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>('idle');
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const { toast } = useToast();
+
+  // Helper function to extract value after a keyword (case-insensitive)
+  const extractValue = (cellContent: string, keyword: string): string => {
+    const lowerContent = cellContent.toLowerCase();
+    const lowerKeyword = keyword.toLowerCase();
+    const keywordIndex = lowerContent.indexOf(lowerKeyword);
+    if (keywordIndex !== -1) {
+      let value = cellContent.substring(keywordIndex + keyword.length).trim();
+      // Remove leading colon or other separators if present
+      if (value.startsWith(':')) {
+        value = value.substring(1).trim();
+      }
+      return value || '-';
+    }
+    return ''; // Return empty if keyword not found, to distinguish from not finding the cell
+  };
+
 
   const handleFileUpload = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -58,106 +79,157 @@ export default function ReturnVerification() {
         const worksheet = workbook.Sheets[sheetName];
         const merges: Range[] | undefined = worksheet['!merges'];
 
-        const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+        // Use { raw: true, dateNF: 'yyyy-mm-dd', defval: null } for better empty cell handling
+        const jsonData: (string | number | Date | null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, dateNF: 'yyyy-mm-dd', defval: null });
 
         const headerRowIndex = jsonData.findIndex(row => row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('awb number')));
         if (headerRowIndex === -1) {
             throw new Error("Header row containing 'AWB Number' not found.");
         }
-        const headerRow = jsonData[headerRowIndex].map(cell => typeof cell === 'string' ? cell.toLowerCase() : ''); // Lowercase for matching
+        // Map header row, converting null/undefined to empty string, and trimming strings
+        const headerRow = jsonData[headerRowIndex].map(cell => typeof cell === 'string' ? cell.trim().toLowerCase() : '');
 
-        // Assuming AWB is always in F (index 5) and Courier is below it
-        const awbColumnIndex = 5;
+        const awbColumnIndex = 5; // Column F
+        const suborderIdIndex = 1; // Column B
+        const productDetailsColumnIndex = 0; // Column A for SKU etc.
+
         if (headerRow.length <= awbColumnIndex || !headerRow[awbColumnIndex].includes('awb number')) {
              throw new Error("Column F (index 5) does not seem to be the 'AWB Number' column based on the header.");
         }
-
-        // Assuming Suborder ID is always in B (index 1) for merge checks
-        const suborderIdIndex = 1;
         if (headerRow.length <= suborderIdIndex || !headerRow[suborderIdIndex].includes('suborder id')) {
              console.warn("Column B (index 1) does not seem to be the 'Suborder ID' column based on the header. Shipment grouping might be incorrect.");
         }
-
-        // Find indices dynamically
-        // Use broader search for product details first, then refine if needed
-        const productDetailsIndex = headerRow.findIndex(cell => cell.includes('product details'));
+        // Dynamically find other columns
         const returnReasonIndex = headerRow.findIndex(cell => cell.includes('return reason'));
         const feeIndex = headerRow.findIndex(cell => cell.includes('return shipping fee'));
         const deliveredIndex = headerRow.findIndex(cell => cell.includes('delivered on'));
-        // Find Return Type column (e.g., 'Return Type' or 'Shipment Type')
         const returnTypeIndex = headerRow.findIndex(cell => cell.includes('return type') || cell.includes('shipment type'));
 
         const extractedData: ReturnItem[] = [];
         const processedRows = new Set<number>();
 
         for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
-            if (processedRows.has(r)) {
-                continue;
-            }
+            if (processedRows.has(r)) continue;
 
-            const potentialAwb = (jsonData[r][awbColumnIndex] ?? '').toString().trim();
+            // Use nullish coalescing and toString() for safety, then trim
+            const potentialAwb = (jsonData[r]?.[awbColumnIndex]?.toString() ?? '').trim();
 
-            if (potentialAwb && /\d/.test(potentialAwb)) { // Check if it contains digits
+            // Check if it's a valid-looking AWB (contains digits, not empty)
+            if (potentialAwb && /\d/.test(potentialAwb)) {
                 const courierRowIndex = r + 1;
                 let courierPartnerValue = 'Unknown';
-                if (courierRowIndex < jsonData.length) {
-                    courierPartnerValue = (jsonData[courierRowIndex][awbColumnIndex] ?? 'Unknown').toString().trim();
+                if (courierRowIndex < jsonData.length && jsonData[courierRowIndex]?.[awbColumnIndex]) {
+                    // Ensure courier cell is treated as string, trim
+                    courierPartnerValue = (jsonData[courierRowIndex][awbColumnIndex]?.toString() ?? 'Unknown').trim();
                     processedRows.add(courierRowIndex);
                 } else {
-                    console.warn(`AWB found in the last row (${r}), cannot read courier partner from below.`);
+                    console.warn(`AWB found in row (${r}), but cannot read courier partner from below or it's empty.`);
                 }
+                processedRows.add(r); // Mark the AWB row as processed
 
-                processedRows.add(r);
-
+                // Determine shipment row range based on merges in Column B
                 let shipmentStartRow = r;
-                if (merges && suborderIdIndex === 1) {
+                let shipmentEndRow = r; // Default to current row if no merge
+
+                if (merges && suborderIdIndex !== -1) {
                      const mergeInfo = merges.find(m => m.s.c === suborderIdIndex && m.e.c === suborderIdIndex && r >= m.s.r && r <= m.e.r);
                      if (mergeInfo) {
                          shipmentStartRow = mergeInfo.s.r;
-                         if (shipmentStartRow <= headerRowIndex) {
-                             console.warn(`Merge for row ${r} points to header or above (${shipmentStartRow}). Using row ${r} for shipment details.`);
+                         shipmentEndRow = mergeInfo.e.r; // Use end row from merge
+                         // Basic validation
+                         if (shipmentStartRow <= headerRowIndex || shipmentStartRow >= jsonData.length) {
+                             console.warn(`Merge start row (${shipmentStartRow}) invalid for data row ${r}. Using row ${r} as start.`);
                              shipmentStartRow = r;
                          }
+                         if (shipmentEndRow < shipmentStartRow || shipmentEndRow >= jsonData.length) {
+                             console.warn(`Merge end row (${shipmentEndRow}) invalid for data row ${r}. Using row ${r} as end.`);
+                              shipmentEndRow = r;
+                         }
                      } else {
-                         console.warn(`No merge found in Column B for row ${r}. Using current row ${r} for shipment details.`);
+                        // No merge found for this row in the Suborder ID column
+                        // console.warn(`No merge found in Column B for data row ${r}. Using current row ${r} for shipment details.`);
                      }
-                 } else if (suborderIdIndex !== 1) {
-                     console.warn(`Suborder ID not in Column B, cannot accurately determine shipment start row from merges.`);
+                 } else if (suborderIdIndex === -1) {
+                     console.warn(`Suborder ID column not found, cannot determine shipment range from merges.`);
                  } else {
-                     console.warn(`No merge information available in the sheet.`);
+                     // console.warn(`No merge information available in the sheet.`);
                  }
 
-                 if (shipmentStartRow >= jsonData.length) {
-                      console.error(`Calculated shipmentStartRow (${shipmentStartRow}) is out of bounds for row ${r}. Using row ${r}.`);
-                      shipmentStartRow = r;
-                 }
 
-                 const detailsRow = jsonData[shipmentStartRow];
-                 const safeGet = (index: number) => (detailsRow && index !== -1 && index < detailsRow.length ? detailsRow[index] ?? '' : '').toString();
+                // --- Extract SKU, Category, Qty, Size from Column A within the shipment range ---
+                let sku = '-';
+                let category = '-';
+                let qty = '-';
+                let size = '-';
 
-                 // Extract Return Type using safeGet
+                for (let rowIdx = shipmentStartRow; rowIdx <= shipmentEndRow; rowIdx++) {
+                    if (rowIdx < jsonData.length && jsonData[rowIdx]?.[productDetailsColumnIndex]) {
+                        const cellValue = (jsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
+                        if (!cellValue) continue; // Skip empty cells
+
+                         // Try extracting each piece of info. If already found, don't overwrite unless with a non-dash value.
+                        let extracted;
+
+                        extracted = extractValue(cellValue, "SKU ID:");
+                        if (!extracted) extracted = extractValue(cellValue, "SKU:");
+                        if (extracted && (sku === '-' || !sku)) sku = extracted;
+
+                        extracted = extractValue(cellValue, "Category:");
+                        if (extracted && (category === '-' || !category)) category = extracted;
+
+                        extracted = extractValue(cellValue, "Qty:");
+                        if (!extracted) extracted = extractValue(cellValue, "Quantity:");
+                         if (extracted && (qty === '-' || !qty)) qty = extracted;
+
+                         extracted = extractValue(cellValue, "Size:");
+                         if (extracted && (size === '-' || !size)) size = extracted;
+                    }
+                }
+                 // --- End Extraction ---
+
+
+                 // Safe get function for other details (using shipmentStartRow)
+                 const detailsRow = jsonData[shipmentStartRow]; // Use start row for general details
+                 const safeGet = (index: number) => {
+                     const value = detailsRow && index !== -1 && index < detailsRow.length ? detailsRow[index] : null;
+                     // Format dates correctly, handle numbers, return strings, default to '-'
+                     if (value instanceof Date) {
+                         return value.toLocaleDateString(); // Or desired date format
+                     }
+                     return (value?.toString() ?? '-').trim();
+                 };
+
                  const returnTypeValue = safeGet(returnTypeIndex);
 
-                const newItem: ReturnItem = {
-                    awb: potentialAwb,
-                    courierPartner: courierPartnerValue,
-                    productDetails: safeGet(productDetailsIndex),
-                    suborderId: safeGet(suborderIdIndex),
-                    returnReason: safeGet(returnReasonIndex),
-                    returnShippingFee: safeGet(feeIndex),
-                    deliveredOn: safeGet(deliveredIndex),
-                    returnType: returnTypeValue || '-', // Default to '-' if empty or not found
-                    received: false,
+                 const newItem: ReturnItem = {
+                     awb: potentialAwb,
+                     courierPartner: courierPartnerValue,
+                     suborderId: safeGet(suborderIdIndex),
+                     sku: sku, // Use extracted value
+                     category: category, // Use extracted value
+                     qty: qty, // Use extracted value
+                     size: size, // Use extracted value
+                     returnReason: safeGet(returnReasonIndex),
+                     returnShippingFee: safeGet(feeIndex), // Keep as string or number initially
+                     deliveredOn: safeGet(deliveredIndex), // Keep raw, format later
+                     returnType: returnTypeValue || '-',
+                     received: false,
                  };
                  extractedData.push(newItem);
+            } else if (potentialAwb) {
+                // Log rows with potential non-standard AWB or other text in AWB column F for debugging
+                // console.log(`Skipping row ${r}: Potential non-AWB content in Col F: "${potentialAwb}"`);
             }
+            // Mark row 'r' as processed regardless of whether an AWB was found,
+            // to avoid reprocessing if it's part of a courier row handled above.
+            processedRows.add(r);
         }
 
 
         if (extractedData.length === 0) {
           toast({
             title: "No Data Found",
-            description: `No valid AWB entries found. Check the format: AWB in Column F, Courier name below it. Ensure AWBs contain numbers.`,
+            description: `No valid AWB entries found. Check format: AWB in Col F (must contain numbers), Courier name below it. Verify file content.`,
             variant: "destructive",
           });
           setFileName(null);
@@ -168,18 +240,18 @@ export default function ReturnVerification() {
             description: `${extractedData.length} return shipments loaded from ${file.name}.`,
           });
         }
-        event.target.value = '';
+        event.target.value = ''; // Clear file input after processing
 
       } catch (error: any) {
         console.error("Error processing file:", error);
         toast({
           title: "File Processing Error",
-          description: error.message || "Could not process the Excel file. Ensure it's valid and follows the specified format.",
+          description: error.message || "Could not process the Excel file. Ensure it's valid and follows the expected format.",
           variant: "destructive",
         });
         setFileName(null);
         setAwbList([]);
-         event.target.value = '';
+         event.target.value = ''; // Clear file input on error
       }
     };
 
@@ -191,7 +263,7 @@ export default function ReturnVerification() {
             variant: "destructive",
         });
         setFileName(null);
-        event.target.value = '';
+        event.target.value = ''; // Clear file input on error
     };
 
     reader.readAsArrayBuffer(file);
@@ -205,19 +277,20 @@ export default function ReturnVerification() {
         (item) => item.awb.toLowerCase() === normalizedInput
       );
 
-      if (foundIndex === -1) {
-          // Try Delhivery prefix match (ignore last digit)
+      // If not found, try Delhivery prefix match (ignore last digit)
+      if (foundIndex === -1 && normalizedInput.length > 1) { // Ensure there's a last digit to ignore
           const inputPrefix = normalizedInput.slice(0, -1);
-          if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) { // Check if prefix is numeric
+          // Check if prefix is numeric and not empty
+          if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) {
               foundIndex = awbList.findIndex((item) => {
                   const itemLower = item.awb.toLowerCase();
-                  const itemPrefix = itemLower.slice(0, -1);
-                  return (
-                      item.courierPartner?.toLowerCase().includes("delhivery") &&
-                      itemPrefix.length > 0 &&
-                      /^\d+$/.test(itemPrefix) && // Ensure item prefix is also numeric
-                      itemPrefix === inputPrefix
-                  );
+                  // Ensure item AWB is long enough and courier matches Delhivery
+                  if (itemLower.length > 1 && item.courierPartner?.toLowerCase().includes("delhivery")) {
+                      const itemPrefix = itemLower.slice(0, -1);
+                      // Ensure item prefix is also numeric and matches input prefix
+                      return /^\d+$/.test(itemPrefix) && itemPrefix === inputPrefix;
+                  }
+                  return false;
               });
           }
       }
@@ -232,41 +305,49 @@ export default function ReturnVerification() {
     setVerificationStatus('idle');
     setVerificationMessage(null);
 
-    // Trigger verification automatically after a short delay if input length is sufficient
-    if (newAwb.length >= 5 && awbList.length > 0) { // Adjust length threshold if needed
+    // Auto-verify only if input is reasonably long and list exists
+    if (newAwb.length >= 5 && awbList.length > 0) {
       setIsVerifying(true);
+      // Debounce verification
       const timer = setTimeout(() => {
         const foundIndex = verifyAwb(newAwb);
 
         if (foundIndex !== -1) {
-            const actualAwb = awbList[foundIndex].awb; // Get the AWB from the list
-            if (!awbList[foundIndex].received) {
+            const matchedItem = awbList[foundIndex];
+            const actualAwb = matchedItem.awb; // AWB from the list
+
+            if (!matchedItem.received) {
+                // Mark as received
                 setAwbList((prevList) => {
                   const newList = [...prevList];
                   newList[foundIndex] = { ...newList[foundIndex], received: true };
                   return newList;
                 });
                 setVerificationStatus('success');
-                // Display the scanned AWB but mention which one it matched if different (Delhivery case)
-                const messageAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
-                setVerificationMessage(`AWB ${messageAwb} marked as received.`);
+                // Display scanned AWB, note if matched differently (Delhivery)
+                const displayAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
+                setVerificationMessage(`AWB ${displayAwb} marked as received.`);
                 setCurrentAwb(""); // Clear input on success
             } else {
+                 // Already received
                  setVerificationStatus('info');
-                 const messageAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
-                 setVerificationMessage(`AWB ${messageAwb} was already marked as received.`);
+                 const displayAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
+                 setVerificationMessage(`AWB ${displayAwb} was already marked as received.`);
+                 // Optionally clear input here too, or leave it for user context
+                 // setCurrentAwb("");
             }
         } else {
+          // Not found
           setVerificationStatus('error');
           setVerificationMessage(`AWB ${newAwb} not found in the uploaded list or could not be matched.`);
         }
-        setIsVerifying(false);
-      }, 300); // Debounce time in ms
+        setIsVerifying(false); // Verification finished
+      }, 300); // 300ms debounce
 
-      // Cleanup function to clear timeout if input changes before verification
+      // Cleanup timeout if input changes before debounce finishes
       return () => clearTimeout(timer);
     } else {
-        // If input is too short or list is empty, ensure verification state is off
+        // Input too short or no list, ensure verifying state is off
         setIsVerifying(false);
     }
   };
@@ -277,37 +358,19 @@ export default function ReturnVerification() {
   const receivedCount = receivedAwbs.length;
 
   const getAlertVariant = (status: VerificationStatus): 'default' | 'destructive' => {
-      switch (status) {
-          case 'error': return 'destructive';
-          case 'success':
-          case 'info':
-          default: return 'default'; // 'success' and 'info' use default styling
-      }
+      return status === 'error' ? 'destructive' : 'default';
   }
 
   const getAlertIcon = (status: VerificationStatus) => {
        switch (status) {
-          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />; // Green for success
-          case 'error': return <XCircle className="h-4 w-4 text-destructive" />; // Red for error (already handled by variant)
-          case 'info': return <Info className="h-4 w-4 text-blue-500" />; // Use Info icon for 'info' status
-          default: return null; // No icon for 'idle'
+          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />;
+          case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
+          case 'info': return <Info className="h-4 w-4 text-blue-500" />;
+          default: return null;
        }
   }
 
-   // Helper function to parse product details string
-   const parseProductDetails = (details: string | undefined): { sku: string; category: string; qty: string; size: string } => {
-    if (!details) return { sku: '-', category: '-', qty: '-', size: '-' };
-    const parts = details.split('|').map(p => p.trim());
-    // Assuming format: SKU | Category | Qty | Size
-    return {
-        sku: parts[0] || '-',
-        category: parts[1] || '-',
-        qty: parts[2] || '-',
-        size: parts[3] || '-',
-    };
-   };
-
-
+  // Updated handleDownloadReport to use new fields
   const handleDownloadReport = useCallback(() => {
     if (awbList.length === 0) {
       toast({
@@ -319,56 +382,41 @@ export default function ReturnVerification() {
     }
 
     try {
-      // Prepare data for the report
-      const reportData = awbList.map(item => {
-         const productInfo = parseProductDetails(item.productDetails);
-         return {
+      const reportData = awbList.map(item => ({
             'AWB Number': item.awb,
             'Courier Partner': item.courierPartner || 'Unknown',
-            'SKU': productInfo.sku, // Separate column for SKU
-            'Category': productInfo.category, // Separate column for Category
-            'Qty': productInfo.qty, // Separate column for Qty
-            'Size': productInfo.size, // Separate column for Size
-            'Return Type': item.returnType || '-', // Add Return Type
+            'SKU': item.sku || '-', // Use new field
+            'Category': item.category || '-', // Use new field
+            'Qty': item.qty || '-', // Use new field
+            'Size': item.size || '-', // Use new field
+            'Return Type': item.returnType || '-',
             'Suborder ID': item.suborderId || '-',
-            //'Return Reason': item.returnReason || '-', // Optional: uncomment if needed
-            //'Return Shipping Fee': item.returnShippingFee || '-', // Optional: uncomment if needed
             'Delivered On': item.deliveredOn
                 ? !isNaN(new Date(item.deliveredOn).getTime())
-                    ? new Date(item.deliveredOn).toLocaleDateString() // Format date if valid
-                    : String(item.deliveredOn) // Otherwise, keep original string/number
+                    ? new Date(item.deliveredOn).toLocaleDateString()
+                    : String(item.deliveredOn)
                 : '-',
             'Status': item.received ? 'Done' : 'Pending',
-         }
-      });
+      }));
 
-      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(reportData);
 
       // --- Apply styling for 'Pending' rows ---
       const range = XLSX.utils.decode_range(ws['!ref']!);
-      const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'Status'); // Find status column index dynamically
+      const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'Status');
 
       if (statusColumnIndex !== -1) {
-          // Iterate through rows (skip header row)
-          for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+          for (let R = range.s.r + 1; R <= range.e.r; ++R) { // Start from 1 (row after header)
             const statusCellAddress = XLSX.utils.encode_cell({ c: statusColumnIndex, r: R });
             const statusCell = ws[statusCellAddress];
 
-            // Check if the status is 'Pending'
             if (statusCell && statusCell.v === 'Pending') {
               // Apply red background fill to all cells in that row
               for (let C = range.s.c; C <= range.e.c; ++C) {
                 const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' }; // Create cell if it doesn't exist
-                // Apply fill style
-                ws[cellAddress].s = { // 's' is for style
-                  fill: {
-                    patternType: "solid", // Required for fgColor
-                    fgColor: { rgb: "FFFF0000" } // Red in ARGB format (Alpha Red Green Blue)
-                    // bgColor: { rgb: "FFFF0000" } // Optional: You usually only need fgColor
-                  }
-                  // You can add other styles like font, border here if needed
+                ws[cellAddress].s = {
+                  fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } // Red fill
                 };
               }
             }
@@ -376,26 +424,20 @@ export default function ReturnVerification() {
       }
       // --- End Styling ---
 
+      // Calculate column widths
+      const colWidths = Object.keys(reportData[0]).map(key => ({
+        wch: Math.max(
+          key.length, // Header length
+          ...reportData.map(row => (row[key as keyof typeof row] ? String(row[key as keyof typeof row]).length : 0)) // Max content length
+        ) + 2 // Add padding
+      }));
+      ws['!cols'] = colWidths;
 
-        // Calculate column widths dynamically
-        const colWidths = reportData.reduce((widths, row) => {
-            Object.entries(row).forEach(([key, value], i) => {
-            const len = Math.max((value ? String(value).length : 0), key.length);
-            widths[i] = Math.max(widths[i] || 10, len + 2); // Min width 10, add padding
-            });
-            return widths;
-        }, [] as number[]);
-        ws['!cols'] = colWidths.map(w => ({ wch: w })); // wch = width in characters
-
-
-      // Create workbook and add worksheet
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Return Status Report");
 
-      // Generate filename and download
-      const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      const dateStr = new Date().toISOString().split('T')[0];
       const outputFileName = `Return_Status_Report_${dateStr}.xlsx`;
-
       XLSX.writeFile(wb, outputFileName);
 
       toast({
@@ -417,7 +459,10 @@ export default function ReturnVerification() {
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
         {/* Header */}
-        <h1 className="text-3xl font-bold text-center mb-8 text-primary">ReturnVerify</h1>
+        <header className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-primary">ReturnVerify</h1>
+            <p className="text-muted-foreground mt-1">Streamline your ecommerce return verification process.</p>
+        </header>
 
       {/* File Upload Card */}
       <Card className="shadow-lg rounded-lg overflow-hidden">
@@ -426,7 +471,7 @@ export default function ReturnVerification() {
             <Upload className="h-6 w-6" /> Upload Return Data
           </CardTitle>
           <CardDescription className="text-secondary-foreground pt-1">
-             Upload Excel (.xlsx). Expects AWB in Col F, Courier below AWB (Col F), Return Type (auto-detected). Details (Product, Suborder ID, etc.) from merged group start row.
+             Upload Excel (.xlsx). Expects: Col F = AWB, Row below AWB in Col F = Courier. Col B = Suborder ID (for grouping). Col A = Product Details (SKU, Cat, Qty, Size in separate rows within group). Col for Return Type (auto-detected).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
@@ -453,7 +498,7 @@ export default function ReturnVerification() {
         </CardContent>
       </Card>
 
-      {/* Verification Card - Only show if file is uploaded */}
+      {/* Verification Card */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
           <CardHeader>
@@ -461,11 +506,10 @@ export default function ReturnVerification() {
                <ScanLine className="h-6 w-6" /> Verify Received AWBs
             </CardTitle>
             <CardDescription className="pt-1">
-              Enter AWB numbers. Delhivery matches ignore the last digit. Verification is automatic.
+              Enter AWB numbers. Delhivery matches ignore the last digit. Verification triggers automatically.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
-             {/* Input field for AWB */}
              <label htmlFor="awb-input" className="block text-sm font-medium text-foreground mb-2">Enter AWB Number:</label>
             <Input
               id="awb-input"
@@ -473,12 +517,11 @@ export default function ReturnVerification() {
               placeholder="Scan or type AWB Number here..."
               value={currentAwb}
               onChange={handleAwbInputChange}
-              disabled={awbList.length === 0} // Disable if no list loaded
+              disabled={awbList.length === 0}
               className="text-base p-3 h-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="AWB Number Input"
               autoComplete="off"
             />
-            {/* Loading indicator */}
             {isVerifying && <p className="text-sm text-muted-foreground mt-2 animate-pulse">Verifying...</p>}
 
              {/* Verification Status Alert */}
@@ -490,14 +533,14 @@ export default function ReturnVerification() {
                        verificationStatus === 'info' ? 'Already Verified' :
                        verificationStatus === 'error' ? 'Not Found' : ''}
                    </AlertTitle>
-                   <AlertDescription className="ml-1">
+                   <AlertDescription className="ml-1"> {/* Consider removing ml-1 if icon size is consistent */}
                      {verificationMessage}
                    </AlertDescription>
                  </Alert>
              )}
           </CardContent>
            {/* Card Footer with stats and download button */}
-           <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center">
+           <CardFooter className="bg-muted/50 p-4 border-t flex flex-wrap justify-between items-center gap-2"> {/* Added flex-wrap and gap */}
              <p className="text-sm text-muted-foreground">
                  {receivedCount} of {awbList.length} shipment(s) marked as received.
              </p>
@@ -505,8 +548,8 @@ export default function ReturnVerification() {
                   onClick={handleDownloadReport}
                   variant="outline"
                   size="sm"
-                  disabled={awbList.length === 0} // Disable if no list
-                  className="ml-auto" // Push to the right
+                  disabled={awbList.length === 0}
+                  className="ml-auto" // Keeps button to the right on larger screens
                >
                   <Download className="mr-2 h-4 w-4" />
                   Download Report
@@ -515,7 +558,7 @@ export default function ReturnVerification() {
         </Card>
       )}
 
-      {/* Missing AWB Report Card - Only show if file is uploaded */}
+      {/* Missing AWB Report Card */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
           <CardHeader className="bg-destructive/10 dark:bg-destructive/20">
@@ -528,48 +571,46 @@ export default function ReturnVerification() {
           </CardHeader>
           <CardContent className="p-0">
             {missingAwbs.length > 0 ? (
-              <ScrollArea className="h-[450px] border-t"> {/* Increased height */}
+              <ScrollArea className="h-[450px] border-t">
                 <Table>
                   <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
                     <TableRow>
                       <TableHead className="w-[150px] font-semibold">AWB Number</TableHead>
                       <TableHead className="font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
-                       <TableHead className="font-semibold min-w-[250px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead> {/* Icon and min-width */}
+                      {/* Updated Product Details Header */}
+                       <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product</TableHead>
                        <TableHead className="font-semibold">Suborder ID</TableHead>
-                       <TableHead className="font-semibold">Return Type</TableHead> {/* Added Return Type */}
+                       <TableHead className="font-semibold">Return Type</TableHead>
                        <TableHead className="font-semibold">Delivered On</TableHead>
-                       {/* Removed Return Reason and Fee columns for brevity */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {missingAwbs.map((item, index) => {
-                       const productInfo = parseProductDetails(item.productDetails);
-                       return (
+                    {missingAwbs.map((item, index) => (
                          <TableRow key={`${item.awb}-${index}`} className="hover:bg-muted/30">
                            <TableCell className="font-medium">{item.awb}</TableCell>
                            <TableCell>{item.courierPartner || 'Unknown'}</TableCell>
-                            <TableCell className="text-xs"> {/* Smaller font for details */}
-                              <div>SKU: {productInfo.sku}</div>
-                              <div>Cat: {productInfo.category}</div>
-                              <div>Qty: {productInfo.qty} | Size: {productInfo.size}</div>
+                           {/* Updated Product Details Cell */}
+                            <TableCell className="text-xs">
+                              <div>SKU: {item.sku || '-'}</div>
+                              <div>Cat: {item.category || '-'}</div>
+                              <div>Qty: {item.qty || '-'} | Size: {item.size || '-'}</div>
                             </TableCell>
                            <TableCell>{item.suborderId || '-'}</TableCell>
-                           <TableCell>{item.returnType || '-'}</TableCell> {/* Display Return Type */}
+                           <TableCell>{item.returnType || '-'}</TableCell>
                            <TableCell>
                               {item.deliveredOn
                                   ? !isNaN(new Date(item.deliveredOn).getTime())
-                                      ? new Date(item.deliveredOn).toLocaleDateString() // Format date
-                                      : String(item.deliveredOn) // Keep original if not a date
+                                      ? new Date(item.deliveredOn).toLocaleDateString()
+                                      : String(item.deliveredOn)
                                   : '-'}
                            </TableCell>
                          </TableRow>
-                       );
-                    })}
+                       ))}
                   </TableBody>
                 </Table>
               </ScrollArea>
             ) : (
-              // Show "All Clear" message if no missing AWBs
+              // "All Clear" message
               <div className="p-6">
                   <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
                      <CheckCircle className="h-4 w-4 text-accent" />
