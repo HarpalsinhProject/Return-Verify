@@ -1,15 +1,16 @@
+// src/components/ReturnVerification.tsx
 "use client";
 
-import { useState, useCallback, ChangeEvent } from "react";
+import { useState, useCallback, ChangeEvent, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/button"; // Keep Button import if needed later, currently unused directly for submit
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText } from "lucide-react";
 
 interface ReturnItem {
   awb: string;
@@ -21,17 +22,27 @@ interface ReturnItem {
   received: boolean;
 }
 
+type VerificationStatus = 'success' | 'error' | 'info' | 'idle';
+
 export default function ReturnVerification() {
   const [awbList, setAwbList] = useState<ReturnItem[]>([]);
   const [currentAwb, setCurrentAwb] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
-  const [verificationMessage, setVerificationMessage] = useState<{ type: 'success' | 'error' | 'info' | null, text: string | null }>({ type: null, text: null });
+  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>('idle');
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleFileUpload = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    // Reset state for new upload
+    setFileName(null);
+    setAwbList([]);
+    setCurrentAwb("");
+    setVerificationStatus('idle');
+    setVerificationMessage(null);
 
     setFileName(file.name);
     const reader = new FileReader();
@@ -42,49 +53,67 @@ export default function ReturnVerification() {
         const workbook = XLSX.read(data, { type: "array", cellDates: true });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
-        // Assuming AWB is in column F (index 5)
         const jsonData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd' });
 
+        // Find the header row to locate 'AWB Number' column dynamically
+        const headerRowIndex = jsonData.findIndex(row => row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('awb number')));
+        if (headerRowIndex === -1) {
+            throw new Error("Header row containing 'AWB Number' not found.");
+        }
+        const headerRow = jsonData[headerRowIndex];
+        const awbColumnIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('awb number'));
+
+        if (awbColumnIndex === -1) {
+          throw new Error("'AWB Number' column not found in the header.");
+        }
+
+        // Find indices for other optional columns
+        const productDetailsIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('product details'));
+        const suborderIdIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('suborder id'));
+        const returnReasonIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('return reason'));
+        const feeIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('return shipping fee'));
+        const deliveredIndex = headerRow.findIndex(cell => typeof cell === 'string' && cell.toLowerCase().includes('delivered on'));
+
+
         const extractedData: ReturnItem[] = jsonData
-          .slice(1) // Skip header row
+          .slice(headerRowIndex + 1) // Start processing data rows after the header
           .map((row) => ({
-            productDetails: row[0] ?? '',
-            suborderId: row[1] ?? '',
-            returnReason: row[2] ?? '',
-            returnShippingFee: row[3] ?? '',
-            deliveredOn: row[4] ?? '',
-            awb: (row[5] ?? '').toString().trim(), // Extract AWB from column F
+            productDetails: productDetailsIndex !== -1 ? row[productDetailsIndex] ?? '' : '',
+            suborderId: suborderIdIndex !== -1 ? row[suborderIdIndex] ?? '' : '',
+            returnReason: returnReasonIndex !== -1 ? row[returnReasonIndex] ?? '' : '',
+            returnShippingFee: feeIndex !== -1 ? row[feeIndex] ?? '' : '',
+            deliveredOn: deliveredIndex !== -1 ? row[deliveredIndex] ?? '' : '',
+            awb: (row[awbColumnIndex] ?? '').toString().trim(),
             received: false,
           }))
           .filter((item) => item.awb); // Filter out rows without AWB
 
         if (extractedData.length === 0) {
           toast({
-            title: "Error Reading File",
-            description: "No AWB numbers found in column F. Please check the file format.",
+            title: "No Data Found",
+            description: `No valid AWB numbers found in the '${headerRow[awbColumnIndex]}' column. Please check the file.`,
             variant: "destructive",
           });
-          setFileName(null);
-          setAwbList([]);
+          setFileName(null); // Clear filename if no data
         } else {
           setAwbList(extractedData);
           toast({
-            title: "File Uploaded",
-            description: `${extractedData.length} AWB numbers loaded successfully.`,
+            title: "File Processed Successfully",
+            description: `${extractedData.length} AWB entries loaded from ${file.name}.`,
           });
         }
         // Reset input value to allow re-uploading the same file
         event.target.value = '';
 
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error processing file:", error);
         toast({
           title: "File Processing Error",
-          description: "Could not process the Excel file. Please ensure it's a valid .xlsx file and check the format.",
+          description: error.message || "Could not process the Excel file. Ensure it's valid and the 'AWB Number' column exists.",
           variant: "destructive",
         });
         setFileName(null);
-        setAwbList([]);
+        setAwbList([]); // Clear list on error
          event.target.value = '';
       }
     };
@@ -100,22 +129,20 @@ export default function ReturnVerification() {
         event.target.value = '';
     };
 
-
     reader.readAsArrayBuffer(file);
-    setCurrentAwb(""); // Clear AWB input on new file upload
-    setVerificationMessage({ type: null, text: null }); // Clear verification message
-    setIsVerifying(false); // Reset verification state
   }, [toast]);
 
   const handleAwbInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const newAwb = event.target.value.trim();
     setCurrentAwb(newAwb);
-    setVerificationMessage({ type: null, text: null }); // Clear message on new input
+    setVerificationStatus('idle'); // Clear status on new input
+    setVerificationMessage(null);
 
     if (newAwb.length >= 5 && awbList.length > 0) {
       setIsVerifying(true);
-      setTimeout(() => { // Simulate async check / debounce
-          const foundIndex = awbList.findIndex(
+      // Debounce or delay the verification slightly
+      const timer = setTimeout(() => {
+        const foundIndex = awbList.findIndex(
           (item) => item.awb.toLowerCase() === newAwb.toLowerCase()
         );
 
@@ -126,121 +153,152 @@ export default function ReturnVerification() {
                   newList[foundIndex] = { ...newList[foundIndex], received: true };
                   return newList;
                 });
-                setVerificationMessage({ type: 'success', text: `AWB ${newAwb} marked as received.` });
+                setVerificationStatus('success');
+                setVerificationMessage(`AWB ${newAwb} marked as received.`);
                 setCurrentAwb(""); // Clear input after successful verification
             } else {
-                 setVerificationMessage({ type: 'info', text: `AWB ${newAwb} was already marked as received.` });
+                 setVerificationStatus('info');
+                 setVerificationMessage(`AWB ${newAwb} was already marked as received.`);
             }
         } else {
-          setVerificationMessage({ type: 'error', text: `AWB ${newAwb} not found in the uploaded list.` });
+          setVerificationStatus('error');
+          setVerificationMessage(`AWB ${newAwb} not found in the uploaded list.`);
         }
         setIsVerifying(false);
-      }, 300); // Adjust delay as needed
+      }, 300); // 300ms delay
+
+      // Cleanup function to clear timeout if input changes quickly
+      return () => clearTimeout(timer);
     } else {
-        setIsVerifying(false);
+        setIsVerifying(false); // Stop verifying if input length is less than 5
     }
   };
 
-  const missingAwbs = awbList.filter((item) => !item.received);
+  const missingAwbs = useMemo(() => awbList.filter((item) => !item.received), [awbList]);
+  const receivedCount = useMemo(() => awbList.filter((item) => item.received).length, [awbList]);
+
+  const getAlertVariant = (status: VerificationStatus): 'default' | 'destructive' => {
+      switch (status) {
+          case 'error': return 'destructive';
+          case 'success':
+          case 'info':
+          default: return 'default';
+      }
+  }
+
+  const getAlertIcon = (status: VerificationStatus) => {
+       switch (status) {
+          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />;
+          case 'error': return <XCircle className="h-4 w-4 text-destructive" />; // Handled by variant color, but icon is specific
+          case 'info': return <AlertTriangle className="h-4 w-4 text-blue-500" />; // Info uses default variant, specify icon color
+          default: return null;
+       }
+  }
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-6">
-      <Card className="bg-secondary shadow-md">
-        <CardHeader>
-          <CardTitle className="text-2xl font-semibold text-primary-foreground flex items-center gap-2">
+    <div className="container mx-auto p-4 md:p-8 space-y-8">
+        <h1 className="text-3xl font-bold text-center mb-8 text-primary">ReturnVerify</h1>
+
+      <Card className="shadow-lg rounded-lg overflow-hidden">
+        <CardHeader className="bg-secondary">
+          <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
             <Upload className="h-6 w-6" /> Upload Return Data
           </CardTitle>
-          <CardDescription className="text-secondary-foreground">
-            Upload the Excel sheet (.xlsx) containing return details. Ensure AWB numbers are in Column F.
+          <CardDescription className="text-secondary-foreground pt-1">
+            Upload an Excel file (.xlsx). Ensure 'AWB Number' column is present.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-6 space-y-4">
+          <label htmlFor="excel-upload" className="block text-sm font-medium text-foreground mb-2">Select Excel File:</label>
           <Input
             id="excel-upload"
             type="file"
-            accept=".xlsx"
+            accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handleFileUpload}
-            className="file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 cursor-pointer"
+            className="block w-full text-sm text-foreground
+                       file:mr-4 file:py-2 file:px-4
+                       file:rounded-lg file:border-0
+                       file:text-sm file:font-semibold
+                       file:bg-primary file:text-primary-foreground
+                       hover:file:bg-primary/90
+                       cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           />
           {fileName && (
-            <p className="text-sm text-muted-foreground mt-2">
-              Loaded file: <span className="font-medium">{fileName}</span> ({awbList.length} AWB entries)
+            <p className="text-sm text-muted-foreground flex items-center gap-2 mt-3">
+              <FileText className="h-4 w-4" />
+              Loaded: <span className="font-medium">{fileName}</span> ({awbList.length} AWB entries found)
             </p>
           )}
         </CardContent>
       </Card>
 
       {awbList.length > 0 && (
-        <Card className="shadow-md">
+        <Card className="shadow-lg rounded-lg overflow-hidden">
           <CardHeader>
-            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-barcode"><path d="M3 5v14"/><path d="M8 5v14"/><path d="M12 5v14"/><path d="M17 5v14"/><path d="M21 5v14"/></svg>
-               Verify Received AWBs
+            <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3">
+               <ScanLine className="h-6 w-6" /> Verify Received AWBs
             </CardTitle>
-            <CardDescription>
-              Enter AWB numbers one by one. Verification starts automatically after 5 characters.
+            <CardDescription className="pt-1">
+              Enter AWB numbers. Verification starts after 5 characters.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6 space-y-4">
+             <label htmlFor="awb-input" className="block text-sm font-medium text-foreground mb-2">Enter AWB Number:</label>
             <Input
+              id="awb-input"
               type="text"
-              placeholder="Enter AWB Number..."
+              placeholder="Type AWB Number here..."
               value={currentAwb}
               onChange={handleAwbInputChange}
               disabled={awbList.length === 0}
-              className="text-lg p-3"
+              className="text-base p-3 h-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              aria-label="AWB Number Input"
             />
             {isVerifying && <p className="text-sm text-muted-foreground mt-2 animate-pulse">Verifying...</p>}
-             {verificationMessage.text && (
-                 <Alert
-                   variant={verificationMessage.type === 'error' ? 'destructive' : verificationMessage.type === 'success' ? 'default' : 'default'}
-                   className={`mt-4 ${verificationMessage.type === 'success' ? 'border-accent text-accent-foreground bg-green-100 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700'
-                                    : verificationMessage.type === 'error' ? 'border-destructive text-destructive-foreground bg-red-100 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700'
-                                    : 'bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700'}`} // Using accent for success, destructive for error, default blueish for info
-                 >
-                   {verificationMessage.type === 'success' && <CheckCircle className="h-4 w-4 text-accent" />}
-                   {verificationMessage.type === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
-                   {verificationMessage.type === 'info' && <AlertTriangle className="h-4 w-4 text-blue-500" />} {/* Use a generic icon for info */}
-                   <AlertDescription className="font-medium">
-                     {verificationMessage.text}
+
+             {verificationStatus !== 'idle' && verificationMessage && (
+                 <Alert variant={getAlertVariant(verificationStatus)} className="mt-4">
+                   {getAlertIcon(verificationStatus)}
+                   <AlertDescription className="font-medium ml-1"> {/* Added ml-1 for spacing from icon */}
+                     {verificationMessage}
                    </AlertDescription>
                  </Alert>
              )}
           </CardContent>
-           <CardFooter>
+           <CardFooter className="bg-muted/50 p-4">
              <p className="text-sm text-muted-foreground">
-                 {awbList.filter(a => a.received).length} of {awbList.length} items marked as received.
+                 {receivedCount} of {awbList.length} item(s) marked as received.
              </p>
            </CardFooter>
         </Card>
       )}
 
       {awbList.length > 0 && (
-        <Card className="shadow-md">
-          <CardHeader>
-            <CardTitle className="text-2xl font-semibold flex items-center gap-2">
-              <AlertTriangle className="h-6 w-6 text-destructive" /> Missing AWB Report
+        <Card className="shadow-lg rounded-lg overflow-hidden">
+          <CardHeader className="bg-destructive/10 dark:bg-destructive/20">
+            <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3 text-destructive">
+              <AlertTriangle className="h-6 w-6" /> Missing AWB Report
             </CardTitle>
-            <CardDescription>
-              The following AWB numbers from the uploaded sheet have not been marked as received.
+            <CardDescription className="pt-1 text-destructive/90">
+              AWB numbers from the sheet that have not been scanned/verified.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0"> {/* Remove padding to allow ScrollArea to fill */}
             {missingAwbs.length > 0 ? (
-              <ScrollArea className="h-[300px] border rounded-md">
+              <ScrollArea className="h-[350px] border-t"> {/* Added border-t */}
                 <Table>
-                  <TableHeader className="sticky top-0 bg-secondary z-10">
+                  <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
                     <TableRow>
-                      <TableHead className="w-1/3">AWB Number</TableHead>
-                       <TableHead>Product Details</TableHead>
-                       <TableHead>Suborder ID</TableHead>
-                       <TableHead>Delivered On</TableHead>
+                      <TableHead className="w-[180px] font-semibold">AWB Number</TableHead>
+                       <TableHead className="font-semibold">Product Details</TableHead>
+                       <TableHead className="font-semibold">Suborder ID</TableHead>
+                       <TableHead className="font-semibold">Delivered On</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {missingAwbs.map((item) => (
-                      <TableRow key={item.awb}>
-                        <TableCell className="font-medium text-destructive">{item.awb}</TableCell>
+                      <TableRow key={item.awb} className="hover:bg-muted/30">
+                        <TableCell className="font-medium">{item.awb}</TableCell>
                          <TableCell>{item.productDetails || '-'}</TableCell>
                          <TableCell>{item.suborderId || '-'}</TableCell>
                          <TableCell>{item.deliveredOn ? new Date(item.deliveredOn).toLocaleDateString() : '-'}</TableCell>
@@ -250,19 +308,24 @@ export default function ReturnVerification() {
                 </Table>
               </ScrollArea>
             ) : (
-              <Alert className="bg-green-100 dark:bg-green-900/30 border-accent text-accent-foreground dark:text-green-300 dark:border-green-700">
-                 <CheckCircle className="h-4 w-4 text-accent" />
-                <AlertDescription className="font-medium">
-                  All AWB numbers from the uploaded list have been received.
-                </AlertDescription>
-              </Alert>
+              <div className="p-6">
+                  <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
+                     <CheckCircle className="h-4 w-4 text-accent" />
+                     <AlertTitle className="text-accent">All Clear!</AlertTitle>
+                    <AlertDescription className="font-medium text-accent/90">
+                      All AWB numbers from the uploaded list have been successfully verified.
+                    </AlertDescription>
+                  </Alert>
+              </div>
             )}
           </CardContent>
-           <CardFooter>
-             <p className="text-sm text-muted-foreground">
-                 {missingAwbs.length} missing item(s).
-             </p>
-           </CardFooter>
+           {missingAwbs.length > 0 && (
+             <CardFooter className="bg-muted/50 p-4 border-t">
+               <p className="text-sm text-muted-foreground">
+                   {missingAwbs.length} missing item(s) listed above.
+               </p>
+             </CardFooter>
+           )}
         </Card>
       )}
     </div>

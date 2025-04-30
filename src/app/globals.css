@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
 @layer base {
@@ -17,10 +17,10 @@ body {
     --popover-foreground: 0 0% 3.9%;
     --primary: 0 0% 9%; /* Default Primary (Near Black) */
     --primary-foreground: 0 0% 98%; /* Default Primary Foreground (Near White) */
-    --secondary: 207 90% 94%; /* Muted Blue (#E3F2FD) */
-    --secondary-foreground: 207 30% 40%; /* Darker Blue/Grey for contrast on Muted Blue */
-    --muted: 207 90% 94%; /* Muted Blue (#E3F2FD) */
-    --muted-foreground: 207 30% 40%; /* Darker Blue/Grey */
+    --secondary: 207 90% 96%; /* Slightly lighter Muted Blue (#F0F9FF based on #E3F2FD) */
+    --secondary-foreground: 207 30% 35%; /* Darker Blue/Grey for contrast */
+    --muted: 210 40% 96.1%; /* Adjusted muted color */
+    --muted-foreground: 215.4 16.3% 46.9%; /* Adjusted muted foreground */
     --accent: 122 39% 49%; /* Green (#4CAF50) */
     --accent-foreground: 0 0% 100%; /* White */
     --destructive: 4 90% 58%; /* Red (#F44336) */
@@ -47,7 +47,7 @@ body {
     /* Dark Theme - Keeping contrast high */
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
+    --card: 0 0% 5.5%; /* Slightly lighter card background for depth */
     --card-foreground: 0 0% 98%;
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
