@@ -39,10 +39,11 @@ export default function ReturnVerification() {
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // Helper function to extract value after a keyword (case-insensitive)
+  // Helper function to extract value after a keyword (case-insensitive, trims whitespace)
   const extractValue = (cellContent: string, keyword: string): string => {
     const lowerContent = cellContent.toLowerCase();
-    const lowerKeyword = keyword.toLowerCase();
+    // Trim whitespace around the keyword itself for matching
+    const lowerKeyword = keyword.toLowerCase().trim();
     const keywordIndex = lowerContent.indexOf(lowerKeyword);
     if (keywordIndex !== -1) {
       let value = cellContent.substring(keywordIndex + keyword.length).trim();
@@ -50,9 +51,10 @@ export default function ReturnVerification() {
       if (value.startsWith(':')) {
         value = value.substring(1).trim();
       }
+      // Return '-' only if the extracted value is truly empty after trimming
       return value || '-';
     }
-    return ''; // Return empty if keyword not found, to distinguish from not finding the cell
+    return ''; // Return empty string if keyword not found
   };
 
 
@@ -105,7 +107,6 @@ export default function ReturnVerification() {
 
         // Dynamically find other columns
         const returnReasonIndex = headerRow.findIndex(cell => cell.includes('return reason'));
-        // Removed returnTypeIndex finding logic
         const deliveredIndex = headerRow.findIndex(cell => cell.includes('delivered on'));
 
         const extractedData: ReturnItem[] = [];
@@ -163,29 +164,32 @@ export default function ReturnVerification() {
                 let sku = '-';
                 let category = '-';
                 let qty = '-';
-                let size = '-';
+                let size = '-'; // Initialize size to '-'
 
                 for (let rowIdx = shipmentStartRow; rowIdx <= shipmentEndRow; rowIdx++) {
                     if (rowIdx < jsonData.length && jsonData[rowIdx]?.[productDetailsColumnIndex]) {
                         const cellValue = (jsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
                         if (!cellValue) continue; // Skip empty cells
 
-                         // Try extracting each piece of info. If already found, don't overwrite unless with a non-dash value.
+                         // Try extracting each piece of info. If already found with a non-dash value, don't overwrite.
                         let extracted;
 
                         extracted = extractValue(cellValue, "SKU ID:");
                         if (!extracted) extracted = extractValue(cellValue, "SKU:");
-                        if (extracted && (sku === '-' || !sku)) sku = extracted;
+                        if (extracted && extracted !== '-' && (sku === '-' || !sku)) sku = extracted;
 
                         extracted = extractValue(cellValue, "Category:");
-                        if (extracted && (category === '-' || !category)) category = extracted;
+                        if (extracted && extracted !== '-' && (category === '-' || !category)) category = extracted;
 
                         extracted = extractValue(cellValue, "Qty:");
                         if (!extracted) extracted = extractValue(cellValue, "Quantity:");
-                         if (extracted && (qty === '-' || !qty)) qty = extracted;
+                        if (extracted && extracted !== '-' && (qty === '-' || !qty)) qty = extracted;
 
-                         extracted = extractValue(cellValue, "Size:");
-                         if (extracted && (size === '-' || !size)) size = extracted;
+                        extracted = extractValue(cellValue, "Size:");
+                         // Only update size if it's currently '-' and we found a non-empty, non-'-' value
+                         if (extracted && extracted !== '-' && (size === '-' || !size)) {
+                             size = extracted;
+                         }
                     }
                 }
                  // --- End Extraction ---
@@ -197,7 +201,8 @@ export default function ReturnVerification() {
                      const value = detailsRow && index !== -1 && index < detailsRow.length ? detailsRow[index] : null;
                      // Format dates correctly, handle numbers, return strings, default to '-'
                      if (value instanceof Date) {
-                         return value.toLocaleDateString(); // Or desired date format
+                         // Check if date is valid before formatting
+                        return !isNaN(value.getTime()) ? value.toLocaleDateString() : '-';
                      }
                      return (value?.toString() ?? '-').trim();
                  };
@@ -226,10 +231,10 @@ export default function ReturnVerification() {
                      sku: sku, // Use extracted value
                      category: category, // Use extracted value
                      qty: qty, // Use extracted value
-                     size: size, // Use extracted value
+                     size: size, // Use extracted (and de-duplicated) value
                      returnReason: safeGet(returnReasonIndex),
                      returnShippingFee: shippingFeeValue?.toString() ?? '-', // Store the original fee value
-                     deliveredOn: safeGet(deliveredIndex), // Keep raw, format later
+                     deliveredOn: safeGet(deliveredIndex), // Keep raw, format later if needed
                      returnType: returnTypeValue, // Use determined RTO/Customer Return
                      received: false,
                  };
@@ -383,7 +388,7 @@ export default function ReturnVerification() {
        switch (status) {
           case 'success': return <CheckCircle className="h-4 w-4 text-accent" />;
           case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
-          case 'info': return <Info className="h-4 w-4 text-blue-500" />;
+          case 'info': return <Info className="h-4 w-4 text-blue-500" />; // Using a standard Info icon
           default: return null;
        }
   }
@@ -414,7 +419,7 @@ export default function ReturnVerification() {
             'Delivered On': item.deliveredOn
                 ? !isNaN(new Date(item.deliveredOn).getTime())
                     ? new Date(item.deliveredOn).toLocaleDateString()
-                    : String(item.deliveredOn)
+                    : String(item.deliveredOn) // Keep as string if not a valid date
                 : '-',
             'Status': item.received ? 'Done' : 'Pending',
       }));
@@ -436,7 +441,7 @@ export default function ReturnVerification() {
                 const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
                 if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' }; // Create cell if it doesn't exist
                 ws[cellAddress].s = {
-                  fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } // Red fill
+                  fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } // Red fill (ARGB format for red)
                 };
               }
             }
@@ -538,7 +543,7 @@ export default function ReturnVerification() {
               value={currentAwb}
               onChange={handleAwbInputChange}
               disabled={awbList.length === 0}
-              className="text-base p-3 h-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="text-base p-3 h-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2" // Added focus styling
               aria-label="AWB Number Input"
               autoComplete="off"
             />
@@ -547,15 +552,21 @@ export default function ReturnVerification() {
              {/* Verification Status Alert */}
              {verificationStatus !== 'idle' && verificationMessage && (
                  <Alert variant={getAlertVariant(verificationStatus)} className="mt-4">
-                   {getAlertIcon(verificationStatus)}
-                   <AlertTitle className="font-semibold">
-                      {verificationStatus === 'success' ? 'Verified' :
-                       verificationStatus === 'info' ? 'Already Verified' :
-                       verificationStatus === 'error' ? 'Not Found' : ''}
-                   </AlertTitle>
-                   <AlertDescription className="ml-1"> {/* Consider removing ml-1 if icon size is consistent */}
-                     {verificationMessage}
-                   </AlertDescription>
+                   <div className="flex items-start"> {/* Use flex to align icon and text */}
+                     <div className="flex-shrink-0 pt-0.5"> {/* Adjust icon position slightly */}
+                       {getAlertIcon(verificationStatus)}
+                     </div>
+                     <div className="ml-3 flex-1"> {/* Use flex-1 to take remaining space */}
+                       <AlertTitle className="font-semibold">
+                          {verificationStatus === 'success' ? 'Verified' :
+                           verificationStatus === 'info' ? 'Already Verified' :
+                           verificationStatus === 'error' ? 'Not Found' : ''}
+                       </AlertTitle>
+                       <AlertDescription> {/* Removed ml-1 */}
+                         {verificationMessage}
+                       </AlertDescription>
+                     </div>
+                   </div>
                  </Alert>
              )}
           </CardContent>
@@ -592,52 +603,59 @@ export default function ReturnVerification() {
           <CardContent className="p-0">
             {missingAwbs.length > 0 ? (
               <ScrollArea className="h-[450px] border-t">
-                <Table>
-                  <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
-                    <TableRow>
-                      <TableHead className="w-[150px] font-semibold">AWB Number</TableHead>
-                      <TableHead className="font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
-                      {/* Updated Product Details Header */}
-                       <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product</TableHead>
-                       <TableHead className="font-semibold">Suborder ID</TableHead>
-                       <TableHead className="font-semibold">Return Type</TableHead>
-                       <TableHead className="font-semibold">Delivered On</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {missingAwbs.map((item, index) => (
-                         <TableRow key={`${item.awb}-${index}`} className="hover:bg-muted/30">
-                           <TableCell className="font-medium">{item.awb}</TableCell>
-                           <TableCell>{item.courierPartner || 'Unknown'}</TableCell>
-                           {/* Updated Product Details Cell */}
-                            <TableCell className="text-xs">
-                              <div>SKU: {item.sku || '-'}</div>
-                              <div>Cat: {item.category || '-'}</div>
-                              <div>Qty: {item.qty || '-'} | Size: {item.size || '-'}</div>
-                            </TableCell>
-                           <TableCell>{item.suborderId || '-'}</TableCell>
-                           <TableCell>{item.returnType || '-'}</TableCell>
-                           <TableCell>
-                              {item.deliveredOn
-                                  ? !isNaN(new Date(item.deliveredOn).getTime())
-                                      ? new Date(item.deliveredOn).toLocaleDateString()
-                                      : String(item.deliveredOn)
-                                  : '-'}
-                           </TableCell>
-                         </TableRow>
-                       ))}
-                  </TableBody>
-                </Table>
+                {/* Wrap table in div for horizontal scrolling if needed */}
+                <div className="overflow-x-auto">
+                  <Table className="min-w-full"> {/* Ensure table takes at least full width */}
+                    <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
+                      <TableRow>
+                        <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
+                        <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
+                        <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
+                        <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
+                        <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
+                        <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {missingAwbs.map((item, index) => (
+                           <TableRow key={`${item.awb}-${index}`} className="hover:bg-muted/30">
+                             <TableCell className="font-medium break-words">{item.awb}</TableCell> {/* Added break-words */}
+                             <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell> {/* Added break-words */}
+                             <TableCell className="text-xs whitespace-normal"> {/* Ensure text wraps */}
+                                <div>SKU: {item.sku || '-'}</div>
+                                <div>Cat: {item.category || '-'}</div>
+                                <div>Qty: {item.qty || '-'} | Size: {item.size || '-'}</div>
+                             </TableCell>
+                             <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
+                             <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
+                             <TableCell className="break-words">
+                                {item.deliveredOn
+                                    ? !isNaN(new Date(item.deliveredOn).getTime())
+                                        ? new Date(item.deliveredOn).toLocaleDateString()
+                                        : String(item.deliveredOn) // Keep as string if not valid date
+                                    : '-'}
+                             </TableCell>
+                           </TableRow>
+                         ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </ScrollArea>
             ) : (
               // "All Clear" message
               <div className="p-6">
                   <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
-                     <CheckCircle className="h-4 w-4 text-accent" />
-                     <AlertTitle className="text-accent">All Clear!</AlertTitle>
-                    <AlertDescription className="font-medium text-accent/90">
-                      All AWB numbers from the uploaded list have been successfully verified.
-                    </AlertDescription>
+                     <div className="flex items-start"> {/* Flex alignment for icon and text */}
+                        <div className="flex-shrink-0 pt-0.5">
+                            <CheckCircle className="h-4 w-4 text-accent" />
+                        </div>
+                        <div className="ml-3 flex-1">
+                           <AlertTitle className="text-accent">All Clear!</AlertTitle>
+                          <AlertDescription className="font-medium text-accent/90">
+                            All AWB numbers from the uploaded list have been successfully verified.
+                          </AlertDescription>
+                        </div>
+                     </div>
                   </Alert>
               </div>
             )}
