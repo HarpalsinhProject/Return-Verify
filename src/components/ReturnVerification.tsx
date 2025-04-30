@@ -16,16 +16,15 @@ import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck,
 interface ReturnItem {
   awb: string;
   suborderId?: string;
-  // Removed productDetails
-  sku?: string; // Added
-  category?: string; // Added
-  qty?: string; // Added
-  size?: string; // Added
+  sku?: string;
+  category?: string;
+  qty?: string;
+  size?: string;
   returnReason?: string;
   returnShippingFee?: string | number;
   deliveredOn?: string | number | Date;
   courierPartner?: string;
-  returnType?: string;
+  returnType?: string; // RTO or Customer Return
   received: boolean;
 }
 
@@ -92,6 +91,7 @@ export default function ReturnVerification() {
         const awbColumnIndex = 5; // Column F
         const suborderIdIndex = 1; // Column B
         const productDetailsColumnIndex = 0; // Column A for SKU etc.
+        const feeIndex = 3; // Column D - Return Shipping Fee
 
         if (headerRow.length <= awbColumnIndex || !headerRow[awbColumnIndex].includes('awb number')) {
              throw new Error("Column F (index 5) does not seem to be the 'AWB Number' column based on the header.");
@@ -99,11 +99,14 @@ export default function ReturnVerification() {
         if (headerRow.length <= suborderIdIndex || !headerRow[suborderIdIndex].includes('suborder id')) {
              console.warn("Column B (index 1) does not seem to be the 'Suborder ID' column based on the header. Shipment grouping might be incorrect.");
         }
+        if (headerRow.length <= feeIndex || !headerRow[feeIndex].includes('return shipping fee')) {
+             console.warn("Column D (index 3) does not seem to be the 'Return Shipping Fee' column based on the header. RTO/Customer Return type determination might be incorrect.");
+        }
+
         // Dynamically find other columns
         const returnReasonIndex = headerRow.findIndex(cell => cell.includes('return reason'));
-        const feeIndex = headerRow.findIndex(cell => cell.includes('return shipping fee'));
+        // Removed returnTypeIndex finding logic
         const deliveredIndex = headerRow.findIndex(cell => cell.includes('delivered on'));
-        const returnTypeIndex = headerRow.findIndex(cell => cell.includes('return type') || cell.includes('shipment type'));
 
         const extractedData: ReturnItem[] = [];
         const processedRows = new Set<number>();
@@ -190,7 +193,7 @@ export default function ReturnVerification() {
 
                  // Safe get function for other details (using shipmentStartRow)
                  const detailsRow = jsonData[shipmentStartRow]; // Use start row for general details
-                 const safeGet = (index: number) => {
+                 const safeGet = (index: number): string => {
                      const value = detailsRow && index !== -1 && index < detailsRow.length ? detailsRow[index] : null;
                      // Format dates correctly, handle numbers, return strings, default to '-'
                      if (value instanceof Date) {
@@ -199,7 +202,22 @@ export default function ReturnVerification() {
                      return (value?.toString() ?? '-').trim();
                  };
 
-                 const returnTypeValue = safeGet(returnTypeIndex);
+                 // Determine Return Type based on Shipping Fee (Column D)
+                 const shippingFeeValue = detailsRow && feeIndex !== -1 && feeIndex < detailsRow.length ? detailsRow[feeIndex] : null;
+                 let returnTypeValue = 'Customer Return'; // Default to Customer Return
+                 if (shippingFeeValue !== null) {
+                     // Attempt to parse as number, handle cases where it might be a string like '0' or a number 0
+                     const feeNumber = Number(shippingFeeValue);
+                     if (!isNaN(feeNumber) && feeNumber === 0) {
+                         returnTypeValue = 'RTO';
+                     } else if (String(shippingFeeValue).trim() === '0') {
+                         // Handle case where it's the string '0'
+                         returnTypeValue = 'RTO';
+                     }
+                 } else {
+                     console.warn(`Could not read Return Shipping Fee from Column D (index ${feeIndex}) for shipment starting at row ${shipmentStartRow}. Defaulting to 'Customer Return'.`);
+                 }
+
 
                  const newItem: ReturnItem = {
                      awb: potentialAwb,
@@ -210,9 +228,9 @@ export default function ReturnVerification() {
                      qty: qty, // Use extracted value
                      size: size, // Use extracted value
                      returnReason: safeGet(returnReasonIndex),
-                     returnShippingFee: safeGet(feeIndex), // Keep as string or number initially
+                     returnShippingFee: shippingFeeValue?.toString() ?? '-', // Store the original fee value
                      deliveredOn: safeGet(deliveredIndex), // Keep raw, format later
-                     returnType: returnTypeValue || '-',
+                     returnType: returnTypeValue, // Use determined RTO/Customer Return
                      received: false,
                  };
                  extractedData.push(newItem);
@@ -370,7 +388,7 @@ export default function ReturnVerification() {
        }
   }
 
-  // Updated handleDownloadReport to use new fields
+  // Updated handleDownloadReport to use new fields and logic
   const handleDownloadReport = useCallback(() => {
     if (awbList.length === 0) {
       toast({
@@ -385,12 +403,14 @@ export default function ReturnVerification() {
       const reportData = awbList.map(item => ({
             'AWB Number': item.awb,
             'Courier Partner': item.courierPartner || 'Unknown',
-            'SKU': item.sku || '-', // Use new field
-            'Category': item.category || '-', // Use new field
-            'Qty': item.qty || '-', // Use new field
-            'Size': item.size || '-', // Use new field
-            'Return Type': item.returnType || '-',
+            'SKU': item.sku || '-',
+            'Category': item.category || '-',
+            'Qty': item.qty || '-',
+            'Size': item.size || '-',
+            'Return Type': item.returnType || '-', // Use the determined RTO/Customer Return
             'Suborder ID': item.suborderId || '-',
+             'Return Reason': item.returnReason || '-', // Added Return Reason
+             'Return Shipping Fee': item.returnShippingFee || '-', // Added Fee
             'Delivered On': item.deliveredOn
                 ? !isNaN(new Date(item.deliveredOn).getTime())
                     ? new Date(item.deliveredOn).toLocaleDateString()
@@ -471,7 +491,7 @@ export default function ReturnVerification() {
             <Upload className="h-6 w-6" /> Upload Return Data
           </CardTitle>
           <CardDescription className="text-secondary-foreground pt-1">
-             Upload Excel (.xlsx). Expects: Col F = AWB, Row below AWB in Col F = Courier. Col B = Suborder ID (for grouping). Col A = Product Details (SKU, Cat, Qty, Size in separate rows within group). Col for Return Type (auto-detected).
+             Upload Excel (.xlsx). Expects: Col F = AWB, Row below AWB in Col F = Courier. Col B = Suborder ID (for grouping). Col A = Product Details (SKU, Cat, Qty, Size in separate rows within group). Col D = Return Shipping Fee (used for RTO/Return type).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
