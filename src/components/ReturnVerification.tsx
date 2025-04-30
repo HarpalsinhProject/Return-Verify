@@ -206,15 +206,16 @@ export default function ReturnVerification() {
       );
 
       if (foundIndex === -1) {
+          // Try Delhivery prefix match (ignore last digit)
           const inputPrefix = normalizedInput.slice(0, -1);
-          if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) {
+          if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) { // Check if prefix is numeric
               foundIndex = awbList.findIndex((item) => {
                   const itemLower = item.awb.toLowerCase();
                   const itemPrefix = itemLower.slice(0, -1);
                   return (
                       item.courierPartner?.toLowerCase().includes("delhivery") &&
                       itemPrefix.length > 0 &&
-                      /^\d+$/.test(itemPrefix) &&
+                      /^\d+$/.test(itemPrefix) && // Ensure item prefix is also numeric
                       itemPrefix === inputPrefix
                   );
               });
@@ -231,13 +232,14 @@ export default function ReturnVerification() {
     setVerificationStatus('idle');
     setVerificationMessage(null);
 
-    if (newAwb.length >= 5 && awbList.length > 0) {
+    // Trigger verification automatically after a short delay if input length is sufficient
+    if (newAwb.length >= 5 && awbList.length > 0) { // Adjust length threshold if needed
       setIsVerifying(true);
       const timer = setTimeout(() => {
         const foundIndex = verifyAwb(newAwb);
 
         if (foundIndex !== -1) {
-            const actualAwb = awbList[foundIndex].awb;
+            const actualAwb = awbList[foundIndex].awb; // Get the AWB from the list
             if (!awbList[foundIndex].received) {
                 setAwbList((prevList) => {
                   const newList = [...prevList];
@@ -245,9 +247,10 @@ export default function ReturnVerification() {
                   return newList;
                 });
                 setVerificationStatus('success');
+                // Display the scanned AWB but mention which one it matched if different (Delhivery case)
                 const messageAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
                 setVerificationMessage(`AWB ${messageAwb} marked as received.`);
-                setCurrentAwb("");
+                setCurrentAwb(""); // Clear input on success
             } else {
                  setVerificationStatus('info');
                  const messageAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
@@ -258,10 +261,12 @@ export default function ReturnVerification() {
           setVerificationMessage(`AWB ${newAwb} not found in the uploaded list or could not be matched.`);
         }
         setIsVerifying(false);
-      }, 300);
+      }, 300); // Debounce time in ms
 
+      // Cleanup function to clear timeout if input changes before verification
       return () => clearTimeout(timer);
     } else {
+        // If input is too short or list is empty, ensure verification state is off
         setIsVerifying(false);
     }
   };
@@ -276,16 +281,16 @@ export default function ReturnVerification() {
           case 'error': return 'destructive';
           case 'success':
           case 'info':
-          default: return 'default';
+          default: return 'default'; // 'success' and 'info' use default styling
       }
   }
 
   const getAlertIcon = (status: VerificationStatus) => {
        switch (status) {
-          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />;
-          case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
-          case 'info': return <Info className="h-4 w-4 text-blue-500" />; // Changed icon for 'info'
-          default: return null;
+          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />; // Green for success
+          case 'error': return <XCircle className="h-4 w-4 text-destructive" />; // Red for error (already handled by variant)
+          case 'info': return <Info className="h-4 w-4 text-blue-500" />; // Use Info icon for 'info' status
+          default: return null; // No icon for 'idle'
        }
   }
 
@@ -314,6 +319,7 @@ export default function ReturnVerification() {
     }
 
     try {
+      // Prepare data for the report
       const reportData = awbList.map(item => {
          const productInfo = parseProductDetails(item.productDetails);
          return {
@@ -325,55 +331,69 @@ export default function ReturnVerification() {
             'Size': productInfo.size, // Separate column for Size
             'Return Type': item.returnType || '-', // Add Return Type
             'Suborder ID': item.suborderId || '-',
+            //'Return Reason': item.returnReason || '-', // Optional: uncomment if needed
+            //'Return Shipping Fee': item.returnShippingFee || '-', // Optional: uncomment if needed
             'Delivered On': item.deliveredOn
                 ? !isNaN(new Date(item.deliveredOn).getTime())
-                    ? new Date(item.deliveredOn).toLocaleDateString()
-                    : String(item.deliveredOn)
+                    ? new Date(item.deliveredOn).toLocaleDateString() // Format date if valid
+                    : String(item.deliveredOn) // Otherwise, keep original string/number
                 : '-',
             'Status': item.received ? 'Done' : 'Pending',
          }
       });
 
+      // Create worksheet
       const ws = XLSX.utils.json_to_sheet(reportData);
 
+      // --- Apply styling for 'Pending' rows ---
       const range = XLSX.utils.decode_range(ws['!ref']!);
       const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'Status'); // Find status column index dynamically
 
       if (statusColumnIndex !== -1) {
+          // Iterate through rows (skip header row)
           for (let R = range.s.r + 1; R <= range.e.r; ++R) {
             const statusCellAddress = XLSX.utils.encode_cell({ c: statusColumnIndex, r: R });
             const statusCell = ws[statusCellAddress];
 
+            // Check if the status is 'Pending'
             if (statusCell && statusCell.v === 'Pending') {
+              // Apply red background fill to all cells in that row
               for (let C = range.s.c; C <= range.e.c; ++C) {
                 const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
-                if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
-                ws[cellAddress].s = {
+                if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' }; // Create cell if it doesn't exist
+                // Apply fill style
+                ws[cellAddress].s = { // 's' is for style
                   fill: {
-                    patternType: "solid",
-                    fgColor: { rgb: "FFFF0000" } // Red
+                    patternType: "solid", // Required for fgColor
+                    fgColor: { rgb: "FFFF0000" } // Red in ARGB format (Alpha Red Green Blue)
+                    // bgColor: { rgb: "FFFF0000" } // Optional: You usually only need fgColor
                   }
+                  // You can add other styles like font, border here if needed
                 };
               }
             }
           }
       }
+      // --- End Styling ---
 
 
+        // Calculate column widths dynamically
         const colWidths = reportData.reduce((widths, row) => {
             Object.entries(row).forEach(([key, value], i) => {
             const len = Math.max((value ? String(value).length : 0), key.length);
-            widths[i] = Math.max(widths[i] || 10, len + 2);
+            widths[i] = Math.max(widths[i] || 10, len + 2); // Min width 10, add padding
             });
             return widths;
         }, [] as number[]);
-        ws['!cols'] = colWidths.map(w => ({ wch: w }));
+        ws['!cols'] = colWidths.map(w => ({ wch: w })); // wch = width in characters
 
 
+      // Create workbook and add worksheet
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Return Status Report");
 
-      const dateStr = new Date().toISOString().split('T')[0];
+      // Generate filename and download
+      const dateStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
       const outputFileName = `Return_Status_Report_${dateStr}.xlsx`;
 
       XLSX.writeFile(wb, outputFileName);
@@ -396,8 +416,10 @@ export default function ReturnVerification() {
 
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
+        {/* Header */}
         <h1 className="text-3xl font-bold text-center mb-8 text-primary">ReturnVerify</h1>
 
+      {/* File Upload Card */}
       <Card className="shadow-lg rounded-lg overflow-hidden">
         <CardHeader className="bg-secondary">
           <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
@@ -431,6 +453,7 @@ export default function ReturnVerification() {
         </CardContent>
       </Card>
 
+      {/* Verification Card - Only show if file is uploaded */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
           <CardHeader>
@@ -442,6 +465,7 @@ export default function ReturnVerification() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-4">
+             {/* Input field for AWB */}
              <label htmlFor="awb-input" className="block text-sm font-medium text-foreground mb-2">Enter AWB Number:</label>
             <Input
               id="awb-input"
@@ -449,13 +473,15 @@ export default function ReturnVerification() {
               placeholder="Scan or type AWB Number here..."
               value={currentAwb}
               onChange={handleAwbInputChange}
-              disabled={awbList.length === 0}
+              disabled={awbList.length === 0} // Disable if no list loaded
               className="text-base p-3 h-11 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               aria-label="AWB Number Input"
               autoComplete="off"
             />
+            {/* Loading indicator */}
             {isVerifying && <p className="text-sm text-muted-foreground mt-2 animate-pulse">Verifying...</p>}
 
+             {/* Verification Status Alert */}
              {verificationStatus !== 'idle' && verificationMessage && (
                  <Alert variant={getAlertVariant(verificationStatus)} className="mt-4">
                    {getAlertIcon(verificationStatus)}
@@ -470,6 +496,7 @@ export default function ReturnVerification() {
                  </Alert>
              )}
           </CardContent>
+           {/* Card Footer with stats and download button */}
            <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center">
              <p className="text-sm text-muted-foreground">
                  {receivedCount} of {awbList.length} shipment(s) marked as received.
@@ -478,8 +505,8 @@ export default function ReturnVerification() {
                   onClick={handleDownloadReport}
                   variant="outline"
                   size="sm"
-                  disabled={awbList.length === 0}
-                  className="ml-auto"
+                  disabled={awbList.length === 0} // Disable if no list
+                  className="ml-auto" // Push to the right
                >
                   <Download className="mr-2 h-4 w-4" />
                   Download Report
@@ -488,6 +515,7 @@ export default function ReturnVerification() {
         </Card>
       )}
 
+      {/* Missing AWB Report Card - Only show if file is uploaded */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
           <CardHeader className="bg-destructive/10 dark:bg-destructive/20">
@@ -510,6 +538,7 @@ export default function ReturnVerification() {
                        <TableHead className="font-semibold">Suborder ID</TableHead>
                        <TableHead className="font-semibold">Return Type</TableHead> {/* Added Return Type */}
                        <TableHead className="font-semibold">Delivered On</TableHead>
+                       {/* Removed Return Reason and Fee columns for brevity */}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -529,8 +558,8 @@ export default function ReturnVerification() {
                            <TableCell>
                               {item.deliveredOn
                                   ? !isNaN(new Date(item.deliveredOn).getTime())
-                                      ? new Date(item.deliveredOn).toLocaleDateString()
-                                      : String(item.deliveredOn)
+                                      ? new Date(item.deliveredOn).toLocaleDateString() // Format date
+                                      : String(item.deliveredOn) // Keep original if not a date
                                   : '-'}
                            </TableCell>
                          </TableRow>
@@ -540,6 +569,7 @@ export default function ReturnVerification() {
                 </Table>
               </ScrollArea>
             ) : (
+              // Show "All Clear" message if no missing AWBs
               <div className="p-6">
                   <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
                      <CheckCircle className="h-4 w-4 text-accent" />
@@ -551,6 +581,7 @@ export default function ReturnVerification() {
               </div>
             )}
           </CardContent>
+           {/* Optional Footer for Missing AWB Card */}
            {missingAwbs.length > 0 && (
              <CardFooter className="bg-muted/50 p-4 border-t">
                <p className="text-sm text-muted-foreground">
