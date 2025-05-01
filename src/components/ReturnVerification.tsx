@@ -116,6 +116,7 @@ export default function ReturnVerification() {
         const suborderIdIndex = 1; // Column B
         const productDetailsColumnIndex = 0; // Column A for SKU etc.
         const feeIndex = 3; // Column D - Return Shipping Fee
+        const returnReasonIndex = 2; // Column C - Return Reason
 
         if (headerRow.length <= awbColumnIndex || !headerRow[awbColumnIndex].includes('awb number')) {
              throw new Error("Column F (index 5) does not seem to be the 'AWB Number' column based on the header.");
@@ -126,9 +127,12 @@ export default function ReturnVerification() {
         if (headerRow.length <= feeIndex || !headerRow[feeIndex].includes('return shipping fee')) {
              console.warn("Column D (index 3) does not seem to be the 'Return Shipping Fee' column based on the header. RTO/Customer Return type determination might be incorrect.");
         }
+         if (headerRow.length <= returnReasonIndex || !headerRow[returnReasonIndex].includes('return reason')) {
+             console.warn("Column C (index 2) does not seem to be the 'Return Reason' column based on the header. Return reason might be missing.");
+         }
 
         // Dynamically find other columns
-        const returnReasonIndex = headerRow.findIndex(cell => cell.includes('return reason'));
+        // const returnReasonIndex = headerRow.findIndex(cell => cell.includes('return reason')); // Now fixed to index 2
         const deliveredIndex = headerRow.findIndex(cell => cell.includes('delivered on'));
 
         const extractedData: ReturnItem[] = [];
@@ -250,6 +254,10 @@ export default function ReturnVerification() {
                          // Check if date is valid before formatting
                         return !isNaN(value.getTime()) ? value.toLocaleDateString() : '-';
                      }
+                     // Trim only if it's a string, otherwise convert to string then trim
+                     if (typeof value === 'string') {
+                        return value.trim() || '-';
+                     }
                      return (value?.toString() ?? '-').trim();
                  };
 
@@ -278,7 +286,7 @@ export default function ReturnVerification() {
                      category: category, // Use extracted value
                      qty: qty, // Use extracted value
                      size: size, // Use extracted (and de-duplicated) value
-                     returnReason: safeGet(returnReasonIndex),
+                     returnReason: safeGet(returnReasonIndex), // Use safeGet for Return Reason (Col C)
                      returnShippingFee: shippingFeeValue?.toString() ?? '-', // Store the original fee value
                      deliveredOn: safeGet(deliveredIndex), // Keep raw, format later if needed
                      returnType: returnTypeValue, // Use determined RTO/Customer Return
@@ -417,6 +425,7 @@ export default function ReturnVerification() {
                             <p><strong>Suborder ID:</strong> {matchedItem.suborderId || '-'}</p>
                             <p><strong>Courier:</strong> {matchedItem.courierPartner || 'Unknown'}</p>
                             <p><strong>Return Type:</strong> {matchedItem.returnType || '-'}</p>
+                             <p><strong>Reason:</strong> {matchedItem.returnReason || '-'}</p> {/* Added Return Reason */}
                             <p><strong>Product:</strong> SKU: {matchedItem.sku || '-'} | Cat: {matchedItem.category || '-'} | Qty: {matchedItem.qty || '-'} | Size: {matchedItem.size || '-'}</p>
                         </div>
                     ),
@@ -599,8 +608,9 @@ export default function ReturnVerification() {
                                     <li><code>Size: [value]</code></li>
                                 </ul>
                            </li>
+                            <li><strong>Col C:</strong> Return Reason (within the shipment range).</li>
                            <li><strong>Col D:</strong> Return Shipping Fee (0 or '0' indicates RTO, others are Customer Return).</li>
-                           <li>Other columns like Return Reason, Delivered On are optional but recommended.</li>
+                           <li>Other columns like Delivered On are optional but recommended.</li>
                         </ul>
                    </TooltipContent>
                </Tooltip>
@@ -719,6 +729,7 @@ export default function ReturnVerification() {
                         <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
                         <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
                         <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
+                        <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead> {/* Added Return Reason Header */}
                         <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
                         <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
                       </TableRow>
@@ -734,6 +745,7 @@ export default function ReturnVerification() {
                                 <div>Qty: {item.qty || '-'} | Size: {item.size || '-'}</div>
                              </TableCell>
                              <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
+                             <TableCell className="break-words">{item.returnReason || '-'}</TableCell> {/* Added Return Reason Cell */}
                              <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
                              <TableCell className="break-words">
                                 {item.deliveredOn
@@ -780,3 +792,4 @@ export default function ReturnVerification() {
     </div>
   );
 }
+
