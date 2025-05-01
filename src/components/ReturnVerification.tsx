@@ -682,7 +682,7 @@ export default function ReturnVerification() {
             type="file"
             accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handleFileUpload}
-            className="block w-full text-sm text-foreground
+            className="block w-full text-sm text-foreground h-11 py-2 px-3  // Increased height and adjusted padding
                        file:mr-4 file:py-2 file:px-4
                        file:rounded-lg file:border-0
                        file:text-sm file:font-semibold
