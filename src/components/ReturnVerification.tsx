@@ -11,7 +11,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 interface ReturnItem {
   awb: string;
@@ -373,8 +375,21 @@ export default function ReturnVerification() {
                 setVerificationStatus('success');
                 // Display scanned AWB, note if matched differently (Delhivery)
                 const displayAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
-                setVerificationMessage(`AWB ${displayAwb} marked as received.`);
+                // Show detailed toast for 15 seconds
+                toast({
+                    title: `AWB ${displayAwb} Verified`,
+                    description: (
+                        <div>
+                            <p><strong>Suborder ID:</strong> {matchedItem.suborderId || '-'}</p>
+                            <p><strong>Courier:</strong> {matchedItem.courierPartner || 'Unknown'}</p>
+                            <p><strong>Return Type:</strong> {matchedItem.returnType || '-'}</p>
+                            <p><strong>Product:</strong> SKU: {matchedItem.sku || '-'} | Cat: {matchedItem.category || '-'} | Qty: {matchedItem.qty || '-'} | Size: {matchedItem.size || '-'}</p>
+                        </div>
+                    ),
+                    duration: 15000, // 15 seconds
+                });
                 setCurrentAwb(""); // Clear input on success
+                 setVerificationMessage(null); // Clear any previous simple message
             } else {
                  // Already received
                  setVerificationStatus('info');
@@ -410,7 +425,7 @@ export default function ReturnVerification() {
 
   const getAlertIcon = (status: VerificationStatus) => {
        switch (status) {
-          case 'success': return <CheckCircle className="h-4 w-4 text-accent" />;
+          // Removed success case as it's handled by toast
           case 'error': return <XCircle className="h-4 w-4 text-destructive" />;
           case 'info': return <Info className="h-4 w-4 text-blue-500" />; // Using a standard Info icon
           default: return null;
@@ -517,11 +532,35 @@ export default function ReturnVerification() {
       <Card className="shadow-lg rounded-lg overflow-hidden">
         <CardHeader className="bg-secondary">
           <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
-            <Upload className="h-6 w-6" /> Upload Return Data
+            <FileSpreadsheet className="h-6 w-6" /> Upload Return Data
           </CardTitle>
-          <CardDescription className="text-secondary-foreground pt-1">
-             Upload Excel (.xlsx). Expects: Col F = AWB, Row below AWB in Col F = Courier. Col B = Suborder ID (for grouping). Col A = Product Details (SKU, Cat, Qty, Size in separate rows within group). Col D = Return Shipping Fee (used for RTO/Return type).
-          </CardDescription>
+           <TooltipProvider>
+               <Tooltip>
+                   <TooltipTrigger asChild>
+                      <CardDescription className="text-secondary-foreground pt-1 cursor-help underline decoration-dashed">
+                         Excel Format Requirements <Info size={14} className="inline ml-1 align-text-top" />
+                      </CardDescription>
+                   </TooltipTrigger>
+                   <TooltipContent className="max-w-xs text-sm" side="bottom" align="start">
+                        <ul className="list-disc space-y-1 pl-4">
+                           <li>File must be <strong>.xlsx</strong></li>
+                           <li><strong>Col F:</strong> AWB Number (must contain digits).</li>
+                           <li><strong>Row directly below AWB (in Col F):</strong> Courier Partner Name.</li>
+                           <li><strong>Col B:</strong> Suborder ID (used for grouping items in one shipment). Merged cells in this column define the shipment range.</li>
+                           <li><strong>Col A:</strong> Product Details within the shipment range (each on a separate row):
+                                <ul className="list-['-_'] pl-4">
+                                    <li><code>SKU ID: [value]</code> or <code>SKU: [value]</code></li>
+                                    <li><code>Category: [value]</code></li>
+                                    <li><code>Qty: [value]</code> or <code>Quantity: [value]</code></li>
+                                    <li><code>Size: [value]</code></li>
+                                </ul>
+                           </li>
+                           <li><strong>Col D:</strong> Return Shipping Fee (0 or '0' indicates RTO, others are Customer Return).</li>
+                           <li>Other columns like Return Reason, Delivered On are optional but recommended.</li>
+                        </ul>
+                   </TooltipContent>
+               </Tooltip>
+           </TooltipProvider>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <label htmlFor="excel-upload" className="block text-sm font-medium text-foreground mb-2">Select Excel File:</label>
@@ -573,8 +612,8 @@ export default function ReturnVerification() {
             />
             {isVerifying && <p className="text-sm text-muted-foreground mt-2 animate-pulse">Verifying...</p>}
 
-             {/* Verification Status Alert */}
-             {verificationStatus !== 'idle' && verificationMessage && (
+             {/* Verification Status Alert (for errors and info only) */}
+             {verificationStatus !== 'idle' && verificationStatus !== 'success' && verificationMessage && (
                  <Alert variant={getAlertVariant(verificationStatus)} className="mt-4">
                    <div className="flex items-start"> {/* Use flex to align icon and text */}
                      <div className="flex-shrink-0 pt-0.5"> {/* Adjust icon position slightly */}
@@ -582,8 +621,8 @@ export default function ReturnVerification() {
                      </div>
                      <div className="ml-3 flex-1"> {/* Use flex-1 to take remaining space */}
                        <AlertTitle className="font-semibold">
-                          {verificationStatus === 'success' ? 'Verified' :
-                           verificationStatus === 'info' ? 'Already Verified' :
+                          {/* verificationStatus === 'success' ? 'Verified' : */}
+                           {verificationStatus === 'info' ? 'Already Verified' :
                            verificationStatus === 'error' ? 'Not Found' : ''}
                        </AlertTitle>
                        <AlertDescription> {/* Removed ml-1 */}

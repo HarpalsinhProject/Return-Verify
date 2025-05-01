@@ -40,14 +40,22 @@ const toastVariants = cva(
   }
 )
 
+// Extend props to include duration
+export interface ToastProps
+  extends React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root>,
+    VariantProps<typeof toastVariants> {
+  duration?: number;
+}
+
+
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants>
->(({ className, variant, ...props }, ref) => {
+  ToastProps // Use the extended interface
+>(({ className, variant, duration, ...props }, ref) => {
   return (
     <ToastPrimitives.Root
       ref={ref}
+      duration={duration} // Pass duration to the primitive
       className={cn(toastVariants({ variant }), className)}
       {...props}
     />
@@ -112,12 +120,12 @@ const ToastDescription = React.forwardRef<
 ))
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
-type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
+// type ToastProps = React.ComponentPropsWithoutRef<typeof Toast> // Removed this line as ToastProps is now defined above
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
 export {
-  type ToastProps,
+  type ToastProps, // Keep this export
   type ToastActionElement,
   ToastProvider,
   ToastViewport,
