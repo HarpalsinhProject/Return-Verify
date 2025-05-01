@@ -402,6 +402,7 @@ export default function ReturnVerification() {
           // Not found
           setVerificationStatus('error');
           setVerificationMessage(`AWB ${newAwb} not found in the uploaded list or could not be matched.`);
+          setCurrentAwb(""); // Clear input automatically if not found
         }
         setIsVerifying(false); // Verification finished
       }, 300); // 300ms debounce
