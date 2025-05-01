@@ -1,7 +1,7 @@
 // src/components/ReturnVerification.tsx
 "use client";
 
-import { useState, useCallback, ChangeEvent, useMemo } from "react";
+import { useState, useCallback, ChangeEvent, useMemo, useRef, useEffect } from "react"; // Added useRef and useEffect
 import * as XLSX from "xlsx";
 import type { Range } from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -40,6 +40,22 @@ export default function ReturnVerification() {
   const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>('idle');
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const { toast } = useToast();
+  const verificationDebounceTimerRef = useRef<NodeJS.Timeout | null>(null); // For debouncing verification
+  const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error
+
+
+  // Cleanup timers on component unmount
+  useEffect(() => {
+    return () => {
+      if (verificationDebounceTimerRef.current) {
+        clearTimeout(verificationDebounceTimerRef.current);
+      }
+      if (clearInputTimerRef.current) {
+        clearTimeout(clearInputTimerRef.current);
+      }
+    };
+  }, []);
+
 
   // Helper function to extract value after a keyword (case-insensitive, trims whitespace)
   const extractValue = (cellContent: string, keyword: string): string => {
@@ -70,6 +86,10 @@ export default function ReturnVerification() {
     setCurrentAwb("");
     setVerificationStatus('idle');
     setVerificationMessage(null);
+    // Clear any pending timers
+    if (verificationDebounceTimerRef.current) clearTimeout(verificationDebounceTimerRef.current);
+    if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current);
+
 
     setFileName(file.name);
     const reader = new FileReader();
@@ -349,17 +369,31 @@ export default function ReturnVerification() {
 
 
   const handleAwbInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const newAwb = event.target.value.trim();
+    const newAwb = event.target.value; // Don't trim immediately, allow spaces during typing
     setCurrentAwb(newAwb);
     setVerificationStatus('idle');
     setVerificationMessage(null);
 
+    // Clear any pending input clear timer because the user is typing again
+    if (clearInputTimerRef.current) {
+      clearTimeout(clearInputTimerRef.current);
+      clearInputTimerRef.current = null;
+    }
+
+    // Clear previous debounce timer
+    if (verificationDebounceTimerRef.current) {
+      clearTimeout(verificationDebounceTimerRef.current);
+    }
+
+    const trimmedAwb = newAwb.trim();
+
     // Auto-verify only if input is reasonably long and list exists
-    if (newAwb.length >= 5 && awbList.length > 0) {
+    if (trimmedAwb.length >= 5 && awbList.length > 0) {
       setIsVerifying(true);
+
       // Debounce verification
-      const timer = setTimeout(() => {
-        const foundIndex = verifyAwb(newAwb);
+      verificationDebounceTimerRef.current = setTimeout(() => {
+        const foundIndex = verifyAwb(trimmedAwb); // Use trimmed AWB for verification
 
         if (foundIndex !== -1) {
             const matchedItem = awbList[foundIndex];
@@ -374,7 +408,7 @@ export default function ReturnVerification() {
                 });
                 setVerificationStatus('success');
                 // Display scanned AWB, note if matched differently (Delhivery)
-                const displayAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
+                const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
                 // Show detailed toast for 15 seconds
                 toast({
                     title: `AWB ${displayAwb} Verified`,
@@ -389,11 +423,11 @@ export default function ReturnVerification() {
                     duration: 15000, // 15 seconds
                 });
                 setCurrentAwb(""); // Clear input on success
-                 setVerificationMessage(null); // Clear any previous simple message
+                setVerificationMessage(null); // Clear any previous simple message
             } else {
                  // Already received
                  setVerificationStatus('info');
-                 const displayAwb = actualAwb.toLowerCase() === newAwb.toLowerCase() ? newAwb : `${newAwb} (matched ${actualAwb})`;
+                 const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
                  setVerificationMessage(`AWB ${displayAwb} was already marked as received.`);
                  // Optionally clear input here too, or leave it for user context
                  // setCurrentAwb("");
@@ -401,17 +435,26 @@ export default function ReturnVerification() {
         } else {
           // Not found
           setVerificationStatus('error');
-          setVerificationMessage(`AWB ${newAwb} not found in the uploaded list or could not be matched.`);
-          setCurrentAwb(""); // Clear input automatically if not found
+          setVerificationMessage(`AWB ${trimmedAwb} not found in the uploaded list or could not be matched.`);
+          // Schedule input field clear after 5 seconds ONLY if not found
+          if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current); // Clear existing timer first
+          clearInputTimerRef.current = setTimeout(() => {
+              setCurrentAwb(""); // Clear input field
+              setVerificationMessage(null); // Clear the error message too
+              setVerificationStatus('idle'); // Reset status
+              clearInputTimerRef.current = null; // Reset timer ref
+          }, 5000); // 5000ms = 5 seconds
         }
         setIsVerifying(false); // Verification finished
       }, 300); // 300ms debounce
 
-      // Cleanup timeout if input changes before debounce finishes
-      return () => clearTimeout(timer);
     } else {
         // Input too short or no list, ensure verifying state is off
         setIsVerifying(false);
+         // If input becomes too short, clear any pending verification timer
+         if (verificationDebounceTimerRef.current) {
+             clearTimeout(verificationDebounceTimerRef.current);
+         }
     }
   };
 
