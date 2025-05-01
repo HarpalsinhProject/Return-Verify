@@ -165,32 +165,56 @@ export default function ReturnVerification() {
                 let category = '-';
                 let qty = '-';
                 let size = '-'; // Initialize size to '-'
+                let foundSku = false;
+                let foundCategory = false;
+                let foundQty = false;
+                let foundSize = false;
 
                 for (let rowIdx = shipmentStartRow; rowIdx <= shipmentEndRow; rowIdx++) {
-                    if (rowIdx < jsonData.length && jsonData[rowIdx]?.[productDetailsColumnIndex]) {
-                        const cellValue = (jsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
-                        if (!cellValue) continue; // Skip empty cells
+                    if (rowIdx >= jsonData.length || !jsonData[rowIdx]?.[productDetailsColumnIndex]) continue;
 
-                         // Try extracting each piece of info. If already found with a non-dash value, don't overwrite.
-                        let extracted;
+                    const cellValue = (jsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
+                    if (!cellValue) continue; // Skip empty cells
 
+                    let extracted;
+
+                    // Only extract if not already found
+                    if (!foundSku) {
                         extracted = extractValue(cellValue, "SKU ID:");
                         if (!extracted) extracted = extractValue(cellValue, "SKU:");
-                        if (extracted && extracted !== '-' && (sku === '-' || !sku)) sku = extracted;
+                        if (extracted && extracted !== '-') {
+                            sku = extracted;
+                            foundSku = true;
+                        }
+                    }
 
+                    if (!foundCategory) {
                         extracted = extractValue(cellValue, "Category:");
-                        if (extracted && extracted !== '-' && (category === '-' || !category)) category = extracted;
+                        if (extracted && extracted !== '-') {
+                            category = extracted;
+                            foundCategory = true;
+                        }
+                    }
 
+                    if (!foundQty) {
                         extracted = extractValue(cellValue, "Qty:");
                         if (!extracted) extracted = extractValue(cellValue, "Quantity:");
-                        if (extracted && extracted !== '-' && (qty === '-' || !qty)) qty = extracted;
-
-                        extracted = extractValue(cellValue, "Size:");
-                         // Only update size if it's currently '-' and we found a non-empty, non-'-' value
-                         if (extracted && extracted !== '-' && (size === '-' || !size)) {
-                             size = extracted;
-                         }
+                        if (extracted && extracted !== '-') {
+                            qty = extracted;
+                            foundQty = true;
+                        }
                     }
+
+                    if (!foundSize) {
+                        extracted = extractValue(cellValue, "Size:");
+                        if (extracted && extracted !== '-') {
+                            size = extracted;
+                            foundSize = true; // Mark size as found
+                        }
+                    }
+
+                    // Optimization: If all details are found, break early
+                    if (foundSku && foundCategory && foundQty && foundSize) break;
                 }
                  // --- End Extraction ---
 
