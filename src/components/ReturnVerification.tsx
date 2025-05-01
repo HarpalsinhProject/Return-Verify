@@ -102,8 +102,8 @@ export default function ReturnVerification() {
         const worksheet = workbook.Sheets[sheetName];
         const merges: Range[] | undefined = worksheet['!merges'];
 
-        // Use { raw: true, dateNF: 'yyyy-mm-dd', defval: null } for better empty cell handling
-        const jsonData: (string | number | Date | null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, dateNF: 'yyyy-mm-dd', defval: null });
+        // Use { raw: false, dateNF: 'yyyy-mm-dd', defval: null } for better empty cell handling and date parsing
+        const jsonData: (string | number | Date | null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: null });
 
         const headerRowIndex = jsonData.findIndex(row => row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('awb number')));
         if (headerRowIndex === -1) {
@@ -141,16 +141,19 @@ export default function ReturnVerification() {
         for (let r = headerRowIndex + 1; r < jsonData.length; r++) {
             if (processedRows.has(r)) continue;
 
-            // Use nullish coalescing and toString() for safety, then trim
-            const potentialAwb = (jsonData[r]?.[awbColumnIndex]?.toString() ?? '').trim();
+            // Use raw: false for dates, raw: true for others? Maybe process all as strings initially?
+            // Let's try getting raw values first for AWB and Courier
+            const rawJsonData: (string | number | null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: null });
+
+            const potentialAwb = (rawJsonData[r]?.[awbColumnIndex]?.toString() ?? '').trim();
 
             // Check if it's a valid-looking AWB (contains digits, not empty)
             if (potentialAwb && /\d/.test(potentialAwb)) {
                 const courierRowIndex = r + 1;
                 let courierPartnerValue = 'Unknown';
-                if (courierRowIndex < jsonData.length && jsonData[courierRowIndex]?.[awbColumnIndex]) {
+                if (courierRowIndex < rawJsonData.length && rawJsonData[courierRowIndex]?.[awbColumnIndex]) {
                     // Ensure courier cell is treated as string, trim
-                    courierPartnerValue = (jsonData[courierRowIndex][awbColumnIndex]?.toString() ?? 'Unknown').trim();
+                    courierPartnerValue = (rawJsonData[courierRowIndex][awbColumnIndex]?.toString() ?? 'Unknown').trim();
                     processedRows.add(courierRowIndex);
                 } else {
                     console.warn(`AWB found in row (${r}), but cannot read courier partner from below or it's empty.`);
@@ -197,9 +200,10 @@ export default function ReturnVerification() {
                 let foundSize = false;
 
                 for (let rowIdx = shipmentStartRow; rowIdx <= shipmentEndRow; rowIdx++) {
-                    if (rowIdx >= jsonData.length || !jsonData[rowIdx]?.[productDetailsColumnIndex]) continue;
+                    // Use rawJsonData here as well for consistent extraction
+                    if (rowIdx >= rawJsonData.length || !rawJsonData[rowIdx]?.[productDetailsColumnIndex]) continue;
 
-                    const cellValue = (jsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
+                    const cellValue = (rawJsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
                     if (!cellValue) continue; // Skip empty cells
 
                     let extracted;
@@ -246,49 +250,53 @@ export default function ReturnVerification() {
 
 
                  // Safe get function for other details (using shipmentStartRow)
-                 const detailsRow = jsonData[shipmentStartRow]; // Use start row for general details
-                 const safeGet = (index: number): string => {
-                     const value = detailsRow && index !== -1 && index < detailsRow.length ? detailsRow[index] : null;
-                     // Format dates correctly, handle numbers, return strings, default to '-'
-                     if (value instanceof Date) {
-                         // Check if date is valid before formatting
-                        return !isNaN(value.getTime()) ? value.toLocaleDateString() : '-';
-                     }
-                     // Trim only if it's a string, otherwise convert to string then trim
-                     if (typeof value === 'string') {
-                        return value.trim() || '-';
-                     }
-                     return (value?.toString() ?? '-').trim();
+                 // Use the jsonData with parsed dates for 'Delivered On'
+                 // Use rawJsonData for Fee and Reason to handle potential string '0' etc.
+                 const detailsRowParsed = jsonData[shipmentStartRow];
+                 const detailsRowRaw = rawJsonData[shipmentStartRow];
+
+                 const safeGet = (index: number, useParsedRow: boolean = false): string | Date | null => {
+                     const row = useParsedRow ? detailsRowParsed : detailsRowRaw;
+                     const value = row && index !== -1 && index < row.length ? row[index] : null;
+                     return value;
                  };
 
-                 // Determine Return Type based on Shipping Fee (Column D)
-                 const shippingFeeValue = detailsRow && feeIndex !== -1 && feeIndex < detailsRow.length ? detailsRow[feeIndex] : null;
+                 const formatValue = (value: string | Date | null): string => {
+                    if (value instanceof Date) {
+                        return !isNaN(value.getTime()) ? value.toLocaleDateString('en-GB') : '-'; // DD/MM/YYYY
+                    }
+                    if (typeof value === 'string') {
+                        return value.trim() || '-';
+                    }
+                    return (value?.toString() ?? '-').trim();
+                 }
+
+
+                 // Determine Return Type based on Shipping Fee (Column D) using raw value
+                 const shippingFeeValueRaw = safeGet(feeIndex) as string | number | null;
                  let returnTypeValue = 'Customer Return'; // Default to Customer Return
-                 if (shippingFeeValue !== null) {
-                     // Attempt to parse as number, handle cases where it might be a string like '0' or a number 0
-                     const feeNumber = Number(shippingFeeValue);
-                     if (!isNaN(feeNumber) && feeNumber === 0) {
-                         returnTypeValue = 'RTO';
-                     } else if (String(shippingFeeValue).trim() === '0') {
-                         // Handle case where it's the string '0'
+                 if (shippingFeeValueRaw !== null) {
+                     // Check if it's number 0 or string '0'
+                     if (Number(shippingFeeValueRaw) === 0 || String(shippingFeeValueRaw).trim() === '0') {
                          returnTypeValue = 'RTO';
                      }
                  } else {
                      console.warn(`Could not read Return Shipping Fee from Column D (index ${feeIndex}) for shipment starting at row ${shipmentStartRow}. Defaulting to 'Customer Return'.`);
                  }
 
+                 const deliveredOnValue = safeGet(deliveredIndex, true); // Get parsed date
 
                  const newItem: ReturnItem = {
                      awb: potentialAwb,
                      courierPartner: courierPartnerValue,
-                     suborderId: safeGet(suborderIdIndex),
+                     suborderId: formatValue(safeGet(suborderIdIndex)),
                      sku: sku, // Use extracted value
                      category: category, // Use extracted value
                      qty: qty, // Use extracted value
                      size: size, // Use extracted (and de-duplicated) value
-                     returnReason: safeGet(returnReasonIndex), // Use safeGet for Return Reason (Col C)
-                     returnShippingFee: shippingFeeValue?.toString() ?? '-', // Store the original fee value
-                     deliveredOn: safeGet(deliveredIndex), // Keep raw, format later if needed
+                     returnReason: formatValue(safeGet(returnReasonIndex)), // Use safeGet for Return Reason (Col C)
+                     returnShippingFee: shippingFeeValueRaw?.toString() ?? '-', // Store the original fee value from raw data
+                     deliveredOn: deliveredOnValue ?? '-', // Store the potentially parsed date or '-'
                      returnType: returnTypeValue, // Use determined RTO/Customer Return
                      received: false,
                  };
@@ -444,9 +452,8 @@ export default function ReturnVerification() {
                             <p><strong>Courier:</strong> {firstVerified.courierPartner || 'Unknown'}</p>
                             <p><strong>Return Type:</strong> {firstVerified.returnType || '-'}</p>
                             <p><strong>Suborder IDs:</strong> {suborderIds}</p>
-                            {/* Optionally show details of the first item if space allows or desired */}
-                             {/* <p><strong>First Item Reason:</strong> {firstVerified.returnReason || '-'}</p>
-                             <p><strong>First Item Product:</strong> SKU: {firstVerified.sku || '-'} | Cat: {firstVerified.category || '-'} | Qty: {firstVerified.qty || '-'} | Size: {firstVerified.size || '-'}</p> */}
+                            <p><strong>First Item Reason:</strong> {firstVerified.returnReason || '-'}</p> {/* Added Return Reason */}
+                             <p><strong>First Item Product:</strong> SKU: {firstVerified.sku || '-'} | Cat: {firstVerified.category || '-'} | Qty: {firstVerified.qty || '-'} | Size: {firstVerified.size || '-'}</p>
                         </div>
                     ),
                     duration: 15000, // 15 seconds
@@ -508,6 +515,38 @@ export default function ReturnVerification() {
        }
   }
 
+  // Helper to format date as DD/MM/YYYY
+  const formatDate = (dateInput: string | number | Date | undefined): string => {
+      if (!dateInput) return '-';
+      try {
+          const date = new Date(dateInput);
+          if (isNaN(date.getTime())) {
+              // If it's not a valid date object, try parsing common string formats
+              if (typeof dateInput === 'string') {
+                   // Handle YYYY-MM-DD from Excel parsing
+                   const parts = dateInput.split('-');
+                   if (parts.length === 3) {
+                       const year = parseInt(parts[0]);
+                       const month = parseInt(parts[1]);
+                       const day = parseInt(parts[2]);
+                       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                            const d = new Date(year, month - 1, day);
+                            if (!isNaN(d.getTime())) {
+                                return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+                            }
+                       }
+                   }
+              }
+              return String(dateInput); // Return original string if parsing fails
+          }
+          return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
+      } catch (e) {
+          console.warn("Could not format date:", dateInput, e);
+          return String(dateInput); // Fallback to string representation
+      }
+  };
+
+
   // Updated handleDownloadReport to use new fields and logic
   const handleDownloadReport = useCallback(() => {
     if (awbList.length === 0) {
@@ -531,11 +570,7 @@ export default function ReturnVerification() {
             'Suborder ID': item.suborderId || '-',
              'Return Reason': item.returnReason || '-', // Added Return Reason
              'Return Shipping Fee': item.returnShippingFee || '-', // Added Fee
-            'Delivered On': item.deliveredOn
-                ? !isNaN(new Date(item.deliveredOn).getTime())
-                    ? new Date(item.deliveredOn).toLocaleDateString()
-                    : String(item.deliveredOn) // Keep as string if not a valid date
-                : '-',
+            'Delivered On': formatDate(item.deliveredOn), // Format date as DD/MM/YYYY
             'Status': item.received ? 'Done' : 'Pending',
       }));
 
@@ -633,7 +668,7 @@ export default function ReturnVerification() {
                            </li>
                             <li><strong>Col C:</strong> Return Reason (within the shipment range).</li>
                            <li><strong>Col D:</strong> Return Shipping Fee (0 or '0' indicates RTO, others are Customer Return).</li>
-                           <li>Other columns like Delivered On are optional but recommended.</li>
+                           <li>Other columns like Delivered On are optional but recommended. Dates should be parseable (e.g., YYYY-MM-DD).</li>
                         </ul>
                    </TooltipContent>
                </Tooltip>
@@ -770,13 +805,7 @@ export default function ReturnVerification() {
                              <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
                              <TableCell className="break-words">{item.returnReason || '-'}</TableCell> {/* Added Return Reason Cell */}
                              <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
-                             <TableCell className="break-words">
-                                {item.deliveredOn
-                                    ? !isNaN(new Date(item.deliveredOn).getTime())
-                                        ? new Date(item.deliveredOn).toLocaleDateString()
-                                        : String(item.deliveredOn) // Keep as string if not valid date
-                                    : '-'}
-                             </TableCell>
+                             <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell> {/* Use formatDate */}
                            </TableRow>
                          ))}
                     </TableBody>
