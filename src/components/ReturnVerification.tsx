@@ -648,7 +648,8 @@ export default function ReturnVerification() {
            <TooltipProvider>
                <Tooltip>
                    <TooltipTrigger asChild>
-                      <CardDescription className="text-secondary-foreground pt-1 cursor-help underline decoration-dashed">
+                      {/* Removed underline and decoration-dashed */}
+                      <CardDescription className="text-secondary-foreground pt-1 cursor-help">
                          Excel Format Requirements <Info size={14} className="inline ml-1 align-text-top" />
                       </CardDescription>
                    </TooltipTrigger>
