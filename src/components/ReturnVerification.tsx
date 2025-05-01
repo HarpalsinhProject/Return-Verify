@@ -346,33 +346,41 @@ export default function ReturnVerification() {
     reader.readAsArrayBuffer(file);
   }, [toast]);
 
-  const verifyAwb = useCallback((inputAwb: string): number => {
+
+  // Updated verifyAwb to return an array of matching indices
+  const verifyAwb = useCallback((inputAwb: string): number[] => {
       const normalizedInput = inputAwb.toLowerCase().trim();
-      if (!normalizedInput) return -1;
+      if (!normalizedInput) return [];
 
-      let foundIndex = awbList.findIndex(
-        (item) => item.awb.toLowerCase() === normalizedInput
-      );
+      const matchingIndices: number[] = [];
 
-      // If not found, try Delhivery prefix match (ignore last digit)
-      if (foundIndex === -1 && normalizedInput.length > 1) { // Ensure there's a last digit to ignore
+      // Find all exact matches
+      awbList.forEach((item, index) => {
+          if (item.awb.toLowerCase() === normalizedInput) {
+              matchingIndices.push(index);
+          }
+      });
+
+      // If no exact matches, try Delhivery prefix match (ignore last digit)
+      if (matchingIndices.length === 0 && normalizedInput.length > 1) {
           const inputPrefix = normalizedInput.slice(0, -1);
           // Check if prefix is numeric and not empty
           if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) {
-              foundIndex = awbList.findIndex((item) => {
+              awbList.forEach((item, index) => {
                   const itemLower = item.awb.toLowerCase();
                   // Ensure item AWB is long enough and courier matches Delhivery
                   if (itemLower.length > 1 && item.courierPartner?.toLowerCase().includes("delhivery")) {
                       const itemPrefix = itemLower.slice(0, -1);
                       // Ensure item prefix is also numeric and matches input prefix
-                      return /^\d+$/.test(itemPrefix) && itemPrefix === inputPrefix;
+                      if (/^\d+$/.test(itemPrefix) && itemPrefix === inputPrefix) {
+                          matchingIndices.push(index);
+                      }
                   }
-                  return false;
               });
           }
       }
 
-      return foundIndex;
+      return matchingIndices;
   }, [awbList]);
 
 
@@ -401,43 +409,58 @@ export default function ReturnVerification() {
 
       // Debounce verification
       verificationDebounceTimerRef.current = setTimeout(() => {
-        const foundIndex = verifyAwb(trimmedAwb); // Use trimmed AWB for verification
+        const foundIndices = verifyAwb(trimmedAwb); // Use trimmed AWB for verification
 
-        if (foundIndex !== -1) {
-            const matchedItem = awbList[foundIndex];
-            const actualAwb = matchedItem.awb; // AWB from the list
+        if (foundIndices.length > 0) {
+            let allPreviouslyReceived = true;
+            const updatedList = [...awbList];
+            const successfullyVerifiedItems: ReturnItem[] = [];
 
-            if (!matchedItem.received) {
-                // Mark as received
-                setAwbList((prevList) => {
-                  const newList = [...prevList];
-                  newList[foundIndex] = { ...newList[foundIndex], received: true };
-                  return newList;
-                });
+            foundIndices.forEach(index => {
+                const matchedItem = updatedList[index];
+                if (!matchedItem.received) {
+                    allPreviouslyReceived = false;
+                    updatedList[index] = { ...matchedItem, received: true };
+                    successfullyVerifiedItems.push(matchedItem); // Add to list for toast
+                }
+            });
+
+            if (!allPreviouslyReceived) {
+                setAwbList(updatedList);
                 setVerificationStatus('success');
-                // Display scanned AWB, note if matched differently (Delhivery)
+                const firstVerified = successfullyVerifiedItems[0] || awbList[foundIndices[0]]; // Get first item for display
+                const actualAwb = firstVerified.awb; // AWB from the list
                 const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
+                const verifiedCount = successfullyVerifiedItems.length;
+                const totalMatches = foundIndices.length;
+                const suborderIds = foundIndices.map(idx => awbList[idx].suborderId || '-').join(', ');
+
+
                 // Show detailed toast for 15 seconds
                 toast({
-                    title: `AWB ${displayAwb} Verified`,
+                    title: `AWB ${displayAwb} Verified (${verifiedCount} of ${totalMatches} matching order${totalMatches > 1 ? 's' : ''})`,
                     description: (
                         <div>
-                            <p><strong>Suborder ID:</strong> {matchedItem.suborderId || '-'}</p>
-                            <p><strong>Courier:</strong> {matchedItem.courierPartner || 'Unknown'}</p>
-                            <p><strong>Return Type:</strong> {matchedItem.returnType || '-'}</p>
-                             <p><strong>Reason:</strong> {matchedItem.returnReason || '-'}</p> {/* Added Return Reason */}
-                            <p><strong>Product:</strong> SKU: {matchedItem.sku || '-'} | Cat: {matchedItem.category || '-'} | Qty: {matchedItem.qty || '-'} | Size: {matchedItem.size || '-'}</p>
+                            <p><strong>Courier:</strong> {firstVerified.courierPartner || 'Unknown'}</p>
+                            <p><strong>Return Type:</strong> {firstVerified.returnType || '-'}</p>
+                            <p><strong>Suborder IDs:</strong> {suborderIds}</p>
+                            {/* Optionally show details of the first item if space allows or desired */}
+                             {/* <p><strong>First Item Reason:</strong> {firstVerified.returnReason || '-'}</p>
+                             <p><strong>First Item Product:</strong> SKU: {firstVerified.sku || '-'} | Cat: {firstVerified.category || '-'} | Qty: {firstVerified.qty || '-'} | Size: {firstVerified.size || '-'}</p> */}
                         </div>
                     ),
                     duration: 15000, // 15 seconds
                 });
                 setCurrentAwb(""); // Clear input on success
                 setVerificationMessage(null); // Clear any previous simple message
+
             } else {
-                 // Already received
+                 // All matching items were already received
                  setVerificationStatus('info');
+                 const firstItem = awbList[foundIndices[0]];
+                 const actualAwb = firstItem.awb;
                  const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
-                 setVerificationMessage(`AWB ${displayAwb} was already marked as received.`);
+                 setVerificationMessage(`AWB ${displayAwb} (all ${foundIndices.length} matching order${foundIndices.length > 1 ? 's' : ''}) already marked as received.`);
                  // Optionally clear input here too, or leave it for user context
                  // setCurrentAwb("");
             }
@@ -736,7 +759,7 @@ export default function ReturnVerification() {
                     </TableHeader>
                     <TableBody>
                       {missingAwbs.map((item, index) => (
-                           <TableRow key={`${item.awb}-${index}`} className="hover:bg-muted/30">
+                           <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"> {/* Add suborderId to key */}
                              <TableCell className="font-medium break-words">{item.awb}</TableCell> {/* Added break-words */}
                              <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell> {/* Added break-words */}
                              <TableCell className="text-xs whitespace-normal"> {/* Ensure text wraps */}
@@ -792,4 +815,3 @@ export default function ReturnVerification() {
     </div>
   );
 }
-
