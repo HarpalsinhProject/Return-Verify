@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils"; // Import cn for conditional classes
 
 
 interface ReturnItem {
@@ -31,6 +32,27 @@ interface ReturnItem {
 }
 
 type VerificationStatus = 'success' | 'error' | 'info' | 'idle';
+
+// Define reasons to highlight
+const HIGHLIGHT_REASONS = [
+    "received wrong product",
+    "received defective product (stains / damaged / torn)"
+];
+
+// Helper function to check if a reason should be highlighted (case-insensitive)
+const shouldHighlightReason = (reason?: string): boolean => {
+    if (!reason) return false;
+    const lowerReason = reason.toLowerCase().trim();
+    return HIGHLIGHT_REASONS.includes(lowerReason);
+};
+
+// Helper function to check if quantity should be highlighted
+const shouldHighlightQty = (qty?: string): boolean => {
+    if (!qty) return false;
+    const numQty = parseInt(qty, 10);
+    return !isNaN(numQty) && numQty > 1;
+};
+
 
 export default function ReturnVerification() {
   const [awbList, setAwbList] = useState<ReturnItem[]>([]);
@@ -285,6 +307,8 @@ export default function ReturnVerification() {
                  }
 
                  const deliveredOnValue = safeGet(deliveredIndex, true); // Get parsed date
+                 const returnReasonValue = formatValue(safeGet(returnReasonIndex)); // Get return reason
+
 
                  const newItem: ReturnItem = {
                      awb: potentialAwb,
@@ -294,7 +318,7 @@ export default function ReturnVerification() {
                      category: category, // Use extracted value
                      qty: qty, // Use extracted value
                      size: size, // Use extracted (and de-duplicated) value
-                     returnReason: formatValue(safeGet(returnReasonIndex)), // Use safeGet for Return Reason (Col C)
+                     returnReason: returnReasonValue, // Store extracted Return Reason (Col C)
                      returnShippingFee: shippingFeeValueRaw?.toString() ?? '-', // Store the original fee value from raw data
                      deliveredOn: deliveredOnValue ?? '-', // Store the potentially parsed date or '-'
                      returnType: returnTypeValue, // Use determined RTO/Customer Return
@@ -443,6 +467,8 @@ export default function ReturnVerification() {
                 const totalMatches = foundIndices.length;
                 const suborderIds = foundIndices.map(idx => awbList[idx].suborderId || '-').join(', ');
 
+                const highlightQty = shouldHighlightQty(firstVerified.qty);
+                const highlightReason = shouldHighlightReason(firstVerified.returnReason);
 
                 // Show detailed toast for 15 seconds
                 toast({
@@ -452,8 +478,17 @@ export default function ReturnVerification() {
                             <p><strong>Courier:</strong> {firstVerified.courierPartner || 'Unknown'}</p>
                             <p><strong>Return Type:</strong> {firstVerified.returnType || '-'}</p>
                             <p><strong>Suborder IDs:</strong> {suborderIds}</p>
-                            <p><strong>First Item Reason:</strong> {firstVerified.returnReason || '-'}</p> {/* Added Return Reason */}
-                             <p><strong>First Item Product:</strong> SKU: {firstVerified.sku || '-'} | Cat: {firstVerified.category || '-'} | Qty: {firstVerified.qty || '-'} | Size: {firstVerified.size || '-'}</p>
+                             {/* Highlighted Return Reason */}
+                             <p className={cn(highlightReason && "font-bold text-destructive")}>
+                                 <strong>Reason:</strong> {firstVerified.returnReason || '-'}
+                             </p>
+                            {/* Product details with highlighted Qty */}
+                            <p>
+                                <strong>Product:</strong> SKU: {firstVerified.sku || '-'} | Cat: {firstVerified.category || '-'} | {' '}
+                                <span className={cn(highlightQty && "font-bold text-destructive")}>
+                                    Qty: {firstVerified.qty || '-'}
+                                </span> | Size: {firstVerified.size || '-'}
+                             </p>
                         </div>
                     ),
                     duration: 15000, // 15 seconds
@@ -475,12 +510,15 @@ export default function ReturnVerification() {
           // Not found
           setVerificationStatus('error');
           setVerificationMessage(`AWB ${trimmedAwb} not found in the uploaded list or could not be matched.`);
-          // Schedule input field clear after 5 seconds ONLY if not found
+          // Schedule input field clear after 5 seconds ONLY if not found and user hasn't typed again
           if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current); // Clear existing timer first
           clearInputTimerRef.current = setTimeout(() => {
-              setCurrentAwb(""); // Clear input field
-              setVerificationMessage(null); // Clear the error message too
-              setVerificationStatus('idle'); // Reset status
+              // Check if the input hasn't changed since the error occurred
+              if (currentAwb === trimmedAwb) {
+                  setCurrentAwb(""); // Clear input field
+                  setVerificationMessage(null); // Clear the error message too
+                  setVerificationStatus('idle'); // Reset status
+              }
               clearInputTimerRef.current = null; // Reset timer ref
           }, 5000); // 5000ms = 5 seconds
         }
@@ -794,21 +832,33 @@ export default function ReturnVerification() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {missingAwbs.map((item, index) => (
-                           <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"> {/* Add suborderId to key */}
-                             <TableCell className="font-medium break-words">{item.awb}</TableCell> {/* Added break-words */}
-                             <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell> {/* Added break-words */}
-                             <TableCell className="text-xs whitespace-normal"> {/* Ensure text wraps */}
-                                <div>SKU: {item.sku || '-'}</div>
-                                <div>Cat: {item.category || '-'}</div>
-                                <div>Qty: {item.qty || '-'} | Size: {item.size || '-'}</div>
-                             </TableCell>
-                             <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
-                             <TableCell className="break-words">{item.returnReason || '-'}</TableCell> {/* Added Return Reason Cell */}
-                             <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
-                             <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell> {/* Use formatDate */}
-                           </TableRow>
-                         ))}
+                      {missingAwbs.map((item, index) => {
+                           const highlightQty = shouldHighlightQty(item.qty);
+                           const highlightReason = shouldHighlightReason(item.returnReason);
+                           return (
+                               <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"> {/* Add suborderId to key */}
+                                 <TableCell className="font-medium break-words">{item.awb}</TableCell> {/* Added break-words */}
+                                 <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell> {/* Added break-words */}
+                                 <TableCell className="text-xs whitespace-normal"> {/* Ensure text wraps */}
+                                    <div>SKU: {item.sku || '-'}</div>
+                                    <div>Cat: {item.category || '-'}</div>
+                                    <div>
+                                       {/* Highlight Qty */}
+                                       <span className={cn(highlightQty && "font-bold text-destructive")}>
+                                           Qty: {item.qty || '-'}
+                                       </span> | Size: {item.size || '-'}
+                                    </div>
+                                 </TableCell>
+                                 <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
+                                 {/* Highlight Return Reason */}
+                                 <TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
+                                     {item.returnReason || '-'}
+                                 </TableCell>
+                                 <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
+                                 <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell> {/* Use formatDate */}
+                               </TableRow>
+                             )
+                           })}
                     </TableBody>
                   </Table>
                 </div>
