@@ -33,17 +33,21 @@ interface ReturnItem {
 
 type VerificationStatus = 'success' | 'error' | 'info' | 'idle';
 
-// Define reasons to highlight
-const HIGHLIGHT_REASONS = [
-    "received wrong product",
-    "received defective product (stains / damaged / torn)"
+// Define keywords to trigger highlighting for return reasons
+const HIGHLIGHT_REASON_KEYWORDS = [
+    "wrong",
+    "defective",
+    "stain", // Match "stains"
+    "damage", // Match "damaged"
+    "torn"
 ];
 
-// Helper function to check if a reason should be highlighted (case-insensitive)
+// Helper function to check if a reason should be highlighted based on keywords (case-insensitive)
 const shouldHighlightReason = (reason?: string): boolean => {
     if (!reason) return false;
     const lowerReason = reason.toLowerCase().trim();
-    return HIGHLIGHT_REASONS.includes(lowerReason);
+    // Check if the reason includes any of the keywords
+    return HIGHLIGHT_REASON_KEYWORDS.some(keyword => lowerReason.includes(keyword));
 };
 
 // Helper function to check if quantity should be highlighted
