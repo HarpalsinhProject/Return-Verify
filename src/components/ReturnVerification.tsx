@@ -67,7 +67,7 @@ export default function ReturnVerification() {
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const { toast } = useToast();
   const verificationDebounceTimerRef = useRef<NodeJS.Timeout | null>(null); // For debouncing verification
-  const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error
+  const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error/info
 
 
   // Cleanup timers on component unmount
@@ -446,6 +446,8 @@ export default function ReturnVerification() {
       // Debounce verification
       verificationDebounceTimerRef.current = setTimeout(() => {
         const foundIndices = verifyAwb(trimmedAwb); // Use trimmed AWB for verification
+        let currentStatus: VerificationStatus = 'idle'; // Track status for timer logic
+        let currentMessage: string | null = null; // Track message for timer logic
 
         if (foundIndices.length > 0) {
             let allPreviouslyReceived = true;
@@ -463,7 +465,7 @@ export default function ReturnVerification() {
 
             if (!allPreviouslyReceived) {
                 setAwbList(updatedList);
-                setVerificationStatus('success');
+                currentStatus = 'success';
                 const firstVerified = successfullyVerifiedItems[0] || awbList[foundIndices[0]]; // Get first item for display
                 const actualAwb = firstVerified.awb; // AWB from the list
                 const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
@@ -502,34 +504,45 @@ export default function ReturnVerification() {
                     className: cn(needsHighlight && "border-destructive border-2"),
                 });
                 setCurrentAwb(""); // Clear input on success
-                setVerificationMessage(null); // Clear any previous simple message
+                currentMessage = null; // Clear any previous simple message
 
             } else {
                  // All matching items were already received
-                 setVerificationStatus('info');
+                 currentStatus = 'info';
                  const firstItem = awbList[foundIndices[0]];
                  const actualAwb = firstItem.awb;
                  const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
-                 setVerificationMessage(`AWB ${displayAwb} (all ${foundIndices.length} matching order${foundIndices.length > 1 ? 's' : ''}) already marked as received.`);
-                 // Optionally clear input here too, or leave it for user context
-                 // setCurrentAwb("");
+                 currentMessage = `AWB ${displayAwb} (all ${foundIndices.length} matching order${foundIndices.length > 1 ? 's' : ''}) already marked as received.`;
             }
         } else {
           // Not found
-          setVerificationStatus('error');
-          setVerificationMessage(`AWB ${trimmedAwb} not found in the uploaded list or could not be matched.`);
-          // Schedule input field clear after 5 seconds ONLY if not found and user hasn't typed again
-          if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current); // Clear existing timer first
-          clearInputTimerRef.current = setTimeout(() => {
-              // Check if the input hasn't changed since the error occurred
-              if (currentAwb === trimmedAwb) {
-                  setCurrentAwb(""); // Clear input field
-                  setVerificationMessage(null); // Clear the error message too
-                  setVerificationStatus('idle'); // Reset status
-              }
-              clearInputTimerRef.current = null; // Reset timer ref
-          }, 5000); // 5000ms = 5 seconds
+          currentStatus = 'error';
+          currentMessage = `AWB ${trimmedAwb} not found in the uploaded list or could not be matched.`;
         }
+
+        // Update state immediately
+        setVerificationStatus(currentStatus);
+        setVerificationMessage(currentMessage);
+
+        // Schedule input field clear after 5 seconds ONLY for 'error' or 'info' status
+        // and only if the user hasn't typed again since this verification started
+        if (currentStatus === 'error' || currentStatus === 'info') {
+             if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current); // Clear existing timer first
+             clearInputTimerRef.current = setTimeout(() => {
+                 // Use a function for setCurrentAwb to get the latest state
+                 setCurrentAwb(prevAwb => {
+                     // Check if the input *still* hasn't changed since the error/info occurred
+                     if (prevAwb === trimmedAwb) {
+                         setVerificationMessage(null); // Clear the error/info message too
+                         setVerificationStatus('idle'); // Reset status
+                         return ""; // Clear input field
+                     }
+                     return prevAwb; // Input changed, don't clear it
+                 });
+                 clearInputTimerRef.current = null; // Reset timer ref
+             }, 5000); // 5000ms = 5 seconds
+        }
+
         setIsVerifying(false); // Verification finished
       }, 300); // 300ms debounce
 
