@@ -469,6 +469,8 @@ export default function ReturnVerification() {
 
                 const highlightQty = shouldHighlightQty(firstVerified.qty);
                 const highlightReason = shouldHighlightReason(firstVerified.returnReason);
+                const needsHighlight = highlightQty || highlightReason; // Check if any highlight is needed
+
 
                 // Show detailed toast for 15 seconds
                 toast({
@@ -492,6 +494,8 @@ export default function ReturnVerification() {
                         </div>
                     ),
                     duration: 15000, // 15 seconds
+                    // Conditionally add destructive border class
+                    className: cn(needsHighlight && "border-destructive border-2"),
                 });
                 setCurrentAwb(""); // Clear input on success
                 setVerificationMessage(null); // Clear any previous simple message
