@@ -1,3 +1,4 @@
+
 // src/components/ReturnVerification.tsx
 "use client";
 
@@ -707,7 +708,6 @@ export default function ReturnVerification() {
            <TooltipProvider>
                <Tooltip>
                    <TooltipTrigger asChild>
-                      {/* Removed underline and decoration-dashed */}
                       <CardDescription className="text-secondary-foreground pt-1 cursor-help">
                          Excel Format Requirements <Info size={14} className="inline ml-1 align-text-top" />
                       </CardDescription>
@@ -741,7 +741,7 @@ export default function ReturnVerification() {
             type="file"
             accept=".xlsx, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             onChange={handleFileUpload}
-            className="block w-full text-sm text-foreground h-11 py-2 px-3  // Increased height and adjusted padding
+            className="block w-full text-sm text-foreground h-11 py-2 px-3
                        file:mr-4 file:py-2 file:px-4
                        file:rounded-lg file:border-0
                        file:text-sm file:font-semibold
@@ -793,11 +793,10 @@ export default function ReturnVerification() {
                      </div>
                      <div className="ml-3 flex-1"> {/* Use flex-1 to take remaining space */}
                        <AlertTitle className="font-semibold">
-                          {/* verificationStatus === 'success' ? 'Verified' : */}
-                           {verificationStatus === 'info' ? 'Already Verified' :
+                          {verificationStatus === 'info' ? 'Already Verified' :
                            verificationStatus === 'error' ? 'Not Found' : ''}
                        </AlertTitle>
-                       <AlertDescription> {/* Removed ml-1 */}
+                       <AlertDescription>
                          {verificationMessage}
                        </AlertDescription>
                      </div>
@@ -805,8 +804,7 @@ export default function ReturnVerification() {
                  </Alert>
              )}
           </CardContent>
-           {/* Card Footer with stats and download button */}
-           <CardFooter className="bg-muted/50 p-4 border-t flex flex-wrap justify-between items-center gap-2"> {/* Added flex-wrap and gap */}
+           <CardFooter className="bg-muted/50 p-4 border-t flex flex-wrap justify-between items-center gap-2">
              <p className="text-sm text-muted-foreground">
                  {receivedCount} of {awbList.length} shipment(s) marked as received.
              </p>
@@ -815,7 +813,7 @@ export default function ReturnVerification() {
                   variant="outline"
                   size="sm"
                   disabled={awbList.length === 0}
-                  className="ml-auto" // Keeps button to the right on larger screens
+                  className="ml-auto"
                >
                   <Download className="mr-2 h-4 w-4" />
                   Download Report
@@ -838,57 +836,43 @@ export default function ReturnVerification() {
           <CardContent className="p-0">
             {missingAwbs.length > 0 ? (
               <ScrollArea className="h-[450px] border-t">
-                {/* Wrap table in div for horizontal scrolling if needed */}
                 <div className="overflow-x-auto">
-                  <Table className="min-w-full"> {/* Ensure table takes at least full width */}
-                    <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
-                      <TableRow>
+                  <Table className="min-w-full">
+                    <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
                         <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
                         <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
                         <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
                         <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
-                        <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead> {/* Added Return Reason Header */}
+                        <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
                         <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
                         <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {missingAwbs.map((item, index) => {
+                    </TableRow></TableHeader>
+                    <TableBody>{
+                      missingAwbs.map((item, index) => {
                            const highlightQty = shouldHighlightQty(item.qty);
                            const highlightReason = shouldHighlightReason(item.returnReason);
                            return (
-                               <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"> {/* Add suborderId to key */}
-                                 <TableCell className="font-medium break-words">{item.awb}</TableCell> {/* Added break-words */}
-                                 <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell> {/* Added break-words */}
-                                 <TableCell className="text-xs whitespace-normal"> {/* Ensure text wraps */}
+                               <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"><TableCell className="font-medium break-words">{item.awb}</TableCell><TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell><TableCell className="text-xs whitespace-normal">
                                     <div>SKU: {item.sku || '-'}</div>
                                     <div>Cat: {item.category || '-'}</div>
                                     <div>
-                                       {/* Highlight Qty */}
                                        <span className={cn(highlightQty && "font-bold text-destructive")}>
                                            Qty: {item.qty || '-'}
                                        </span> | Size: {item.size || '-'}
                                     </div>
-                                 </TableCell>
-                                 <TableCell className="break-words">{item.suborderId || '-'}</TableCell> {/* Added break-words */}
-                                 {/* Highlight Return Reason */}
-                                 <TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
+                               </TableCell><TableCell className="break-words">{item.suborderId || '-'}</TableCell><TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
                                      {item.returnReason || '-'}
-                                 </TableCell>
-                                 <TableCell className="break-words">{item.returnType || '-'}</TableCell> {/* Added break-words */}
-                                 <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell> {/* Use formatDate */}
-                               </TableRow>
-                             )
+                                 </TableCell><TableCell className="break-words">{item.returnType || '-'}</TableCell><TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell></TableRow>
+                             );
                            })}
                     </TableBody>
                   </Table>
                 </div>
               </ScrollArea>
             ) : (
-              // "All Clear" message
               <div className="p-6">
                   <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
-                     <div className="flex items-start"> {/* Flex alignment for icon and text */}
+                     <div className="flex items-start">
                         <div className="flex-shrink-0 pt-0.5">
                             <CheckCircle className="h-4 w-4 text-accent" />
                         </div>
@@ -903,7 +887,6 @@ export default function ReturnVerification() {
               </div>
             )}
           </CardContent>
-           {/* Optional Footer for Missing AWB Card */}
            {missingAwbs.length > 0 && (
              <CardFooter className="bg-muted/50 p-4 border-t">
                <p className="text-sm text-muted-foreground">
