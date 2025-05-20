@@ -545,7 +545,7 @@ export default function ReturnVerification() {
         }
 
         setIsVerifying(false); // Verification finished
-      }, 300); // 300ms debounce
+      }, 150); // 150ms debounce (changed from 300ms)
 
     } else {
         // Input too short or no list, ensure verifying state is off
@@ -837,7 +837,7 @@ export default function ReturnVerification() {
             {missingAwbs.length > 0 ? (
               <ScrollArea className="h-[450px] border-t">
                 <div className="overflow-x-auto">
-                  <Table className="min-w-full">
+                  <Table>
                     <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
                         <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
                         <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
@@ -899,3 +899,4 @@ export default function ReturnVerification() {
     </div>
   );
 }
+
