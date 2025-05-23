@@ -69,6 +69,7 @@ export default function ReturnVerification() {
   const { toast } = useToast();
   const verificationDebounceTimerRef = useRef<NodeJS.Timeout | null>(null); // For debouncing verification
   const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error/info
+  const awbInputRef = useRef<HTMLInputElement>(null); // Ref for the AWB input field
 
 
   // Cleanup timers on component unmount
@@ -505,6 +506,7 @@ export default function ReturnVerification() {
                     className: cn(needsHighlight && "border-destructive border-2"),
                 });
                 setCurrentAwb(""); // Clear input on success
+                awbInputRef.current?.focus(); // Refocus the input field
                 currentMessage = null; // Clear any previous simple message
 
             } else {
@@ -773,6 +775,7 @@ export default function ReturnVerification() {
              <label htmlFor="awb-input" className="block text-sm font-medium text-foreground mb-2">Enter AWB Number:</label>
             <Input
               id="awb-input"
+              ref={awbInputRef} // Assign the ref here
               type="text"
               placeholder="Scan or type AWB Number here..."
               value={currentAwb}
