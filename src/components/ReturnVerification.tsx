@@ -58,6 +58,23 @@ const shouldHighlightQty = (qty?: string): boolean => {
     return !isNaN(numQty) && numQty > 1;
 };
 
+// Helper function to play sounds
+// IMPORTANT: User needs to place verify-success.mp3 and verify-oops.mp3 in the /public/sounds/ directory
+const playSound = (soundFileUrl: string) => {
+  if (typeof window !== 'undefined') { // Ensure this only runs on the client
+    try {
+      const audio = new Audio(soundFileUrl);
+      audio.play().catch(error => {
+        // Log error if audio play fails (e.g., file not found, autoplay blocked by browser)
+        // You might want to notify the user more subtly or just log in development
+        console.warn(`Could not play sound ${soundFileUrl}:`, error);
+      });
+    } catch (e) {
+      console.warn(`Error initializing Audio for ${soundFileUrl}:`, e);
+    }
+  }
+};
+
 
 export default function ReturnVerification() {
   const [awbList, setAwbList] = useState<ReturnItem[]>([]);
@@ -505,6 +522,7 @@ export default function ReturnVerification() {
                     // Conditionally add destructive border class
                     className: cn(needsHighlight && "border-destructive border-2"),
                 });
+                playSound('/sounds/verify-success.mp3'); // Play success sound
                 setCurrentAwb(""); // Clear input on success
                 awbInputRef.current?.focus(); // Refocus the input field
                 currentMessage = null; // Clear any previous simple message
@@ -516,11 +534,13 @@ export default function ReturnVerification() {
                  const actualAwb = firstItem.awb;
                  const displayAwb = actualAwb.toLowerCase() === trimmedAwb.toLowerCase() ? trimmedAwb : `${trimmedAwb} (matched ${actualAwb})`;
                  currentMessage = `AWB ${displayAwb} (all ${foundIndices.length} matching order${foundIndices.length > 1 ? 's' : ''}) already marked as received.`;
+                 playSound('/sounds/verify-oops.mp3'); // Play oops/info sound
             }
         } else {
           // Not found
           currentStatus = 'error';
           currentMessage = `AWB ${trimmedAwb} not found in the uploaded list or could not be matched.`;
+          playSound('/sounds/verify-oops.mp3'); // Play oops/error sound
         }
 
         // Update state immediately
