@@ -40,7 +40,9 @@ const HIGHLIGHT_REASON_KEYWORDS = [
     "defective",
     "stain", // Match "stains"
     "damage", // Match "damaged"
-    "torn"
+    "torn",
+    "incomplete",
+    "missing"
 ];
 
 // Helper function to check if a reason should be highlighted based on keywords (case-insensitive)
