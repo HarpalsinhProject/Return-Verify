@@ -574,7 +574,7 @@ export default function ReturnVerification() {
                  // Use a function for setCurrentAwb to get the latest state
                  setCurrentAwb(prevAwb => {
                      // Check if the input *still* hasn't changed since the error/info occurred
-                     if (prevAwb === trimmedAwb) {
+                     if (prevAwb.trim() === trimmedAwb) {
                          setVerificationMessage(null); // Clear the error/info message too
                          setVerificationStatus('idle'); // Reset status
                          return ""; // Clear input field
@@ -732,6 +732,66 @@ export default function ReturnVerification() {
   }, [awbList, toast]);
 
 
+    const missingAwbsTable = useMemo(() => {
+        if (missingAwbs.length === 0) {
+            return (
+              <div className="p-6">
+                  <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
+                     <div className="flex items-start">
+                        <div className="flex-shrink-0 pt-0.5">
+                            <CheckCircle className="h-4 w-4 text-accent" />
+                        </div>
+                        <div className="ml-3 flex-1">
+                           <AlertTitle className="text-accent">All Clear!</AlertTitle>
+                          <AlertDescription className="font-medium text-accent/90">
+                            All AWB numbers from the uploaded list have been successfully verified.
+                          </AlertDescription>
+                        </div>
+                     </div>
+                  </Alert>
+              </div>
+            );
+        }
+
+        return (
+            <ScrollArea className="h-[450px] border-t">
+                <div className="overflow-x-auto">
+                    <Table>
+                        <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
+                            <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
+                            <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
+                            <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
+                            <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
+                            <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
+                            <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
+                            <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
+                        </TableRow></TableHeader>
+                        <TableBody>{
+                        missingAwbs.map((item, index) => {
+                            const highlightQty = shouldHighlightQty(item.qty);
+                            const highlightReason = shouldHighlightReason(item.returnReason);
+                            return (
+                                <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"><TableCell className="font-medium break-words">{item.awb}</TableCell><TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell><TableCell className="text-xs whitespace-normal">
+                                    <div>SKU: {item.sku || '-'}</div>
+                                    <div>Cat: {item.category || '-'}</div>
+                                    <div>
+                                       <span className={cn(highlightQty && "font-bold text-destructive")}>
+                                           Qty: {item.qty || '-'}
+                                       </span> | Size: {item.size || '-'}
+                                    </div>
+                                </TableCell><TableCell className="break-words">{item.suborderId || '-'}</TableCell><TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
+                                     {item.returnReason || '-'}
+                                 </TableCell><TableCell className="break-words">{item.returnType || '-'}</TableCell><TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell></TableRow>
+                             );
+                           })}
+                        </TableBody>
+                    </Table>
+                </div>
+            </ScrollArea>
+        );
+    }, [missingAwbs]);
+
+
   return (
     <div className="container mx-auto p-4 md:p-8 space-y-8">
         {/* Header */}
@@ -876,58 +936,7 @@ export default function ReturnVerification() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            {missingAwbs.length > 0 ? (
-              <ScrollArea className="h-[450px] border-t">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
-                        <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
-                        <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
-                        <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
-                        <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
-                        <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
-                        <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
-                        <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
-                    </TableRow></TableHeader>
-                    <TableBody>{
-                      missingAwbs.map((item, index) => {
-                           const highlightQty = shouldHighlightQty(item.qty);
-                           const highlightReason = shouldHighlightReason(item.returnReason);
-                           return (
-                               <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"><TableCell className="font-medium break-words">{item.awb}</TableCell><TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell><TableCell className="text-xs whitespace-normal">
-                                    <div>SKU: {item.sku || '-'}</div>
-                                    <div>Cat: {item.category || '-'}</div>
-                                    <div>
-                                       <span className={cn(highlightQty && "font-bold text-destructive")}>
-                                           Qty: {item.qty || '-'}
-                                       </span> | Size: {item.size || '-'}
-                                    </div>
-                               </TableCell><TableCell className="break-words">{item.suborderId || '-'}</TableCell><TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
-                                     {item.returnReason || '-'}
-                                 </TableCell><TableCell className="break-words">{item.returnType || '-'}</TableCell><TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell></TableRow>
-                             );
-                           })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </ScrollArea>
-            ) : (
-              <div className="p-6">
-                  <Alert variant="default" className="border-accent bg-accent/10 dark:bg-accent/20">
-                     <div className="flex items-start">
-                        <div className="flex-shrink-0 pt-0.5">
-                            <CheckCircle className="h-4 w-4 text-accent" />
-                        </div>
-                        <div className="ml-3 flex-1">
-                           <AlertTitle className="text-accent">All Clear!</AlertTitle>
-                          <AlertDescription className="font-medium text-accent/90">
-                            All AWB numbers from the uploaded list have been successfully verified.
-                          </AlertDescription>
-                        </div>
-                     </div>
-                  </Alert>
-              </div>
-            )}
+            {missingAwbsTable}
           </CardContent>
            {missingAwbs.length > 0 && (
              <CardFooter className="bg-muted/50 p-4 border-t">
@@ -941,6 +950,3 @@ export default function ReturnVerification() {
     </div>
   );
 }
-
-
-    
