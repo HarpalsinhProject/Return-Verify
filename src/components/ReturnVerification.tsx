@@ -80,6 +80,8 @@ const playSound = (soundFileUrl: string) => {
 
 export default function ReturnVerification() {
   const [awbList, setAwbList] = useState<ReturnItem[]>([]);
+  const [awbMap, setAwbMap] = useState<Map<string, number[]>>(new Map());
+  const [delhiveryPrefixMap, setDelhiveryPrefixMap] = useState<Map<string, number[]>>(new Map());
   const [currentAwb, setCurrentAwb] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
   const [isVerifying, setIsVerifying] = useState<boolean>(false);
@@ -130,6 +132,8 @@ export default function ReturnVerification() {
     // Reset state for new upload
     setFileName(null);
     setAwbList([]);
+    setAwbMap(new Map());
+    setDelhiveryPrefixMap(new Map());
     setCurrentAwb("");
     setVerificationStatus('idle');
     setVerificationMessage(null);
@@ -368,7 +372,30 @@ export default function ReturnVerification() {
           });
           setFileName(null);
         } else {
+          const newAwbMap = new Map<string, number[]>();
+          const newDelhiveryPrefixMap = new Map<string, number[]>();
+
+          extractedData.forEach((item, index) => {
+              const key = item.awb.toLowerCase();
+              if (!newAwbMap.has(key)) {
+                  newAwbMap.set(key, []);
+              }
+              newAwbMap.get(key)!.push(index);
+
+              if (item.courierPartner?.toLowerCase().includes("delhivery")) {
+                  const prefix = key.slice(0, -1);
+                  if (prefix.length > 0 && /^\d+$/.test(prefix)) {
+                      if (!newDelhiveryPrefixMap.has(prefix)) {
+                          newDelhiveryPrefixMap.set(prefix, []);
+                      }
+                      newDelhiveryPrefixMap.get(prefix)!.push(index);
+                  }
+              }
+          });
+
           setAwbList(extractedData);
+          setAwbMap(newAwbMap);
+          setDelhiveryPrefixMap(newDelhiveryPrefixMap);
           toast({
             title: "File Processed Successfully",
             description: `${extractedData.length} return shipments loaded from ${file.name}.`,
@@ -404,41 +431,31 @@ export default function ReturnVerification() {
   }, [toast]);
 
 
-  // Updated verifyAwb to return an array of matching indices
+  // Updated verifyAwb to use maps for O(1) lookup
   const verifyAwb = useCallback((inputAwb: string): number[] => {
       const normalizedInput = inputAwb.toLowerCase().trim();
       if (!normalizedInput) return [];
 
-      const matchingIndices: number[] = [];
+      // Check for exact match in the map first
+      const exactMatches = awbMap.get(normalizedInput);
+      if (exactMatches && exactMatches.length > 0) {
+          return exactMatches;
+      }
 
-      // Find all exact matches
-      awbList.forEach((item, index) => {
-          if (item.awb.toLowerCase() === normalizedInput) {
-              matchingIndices.push(index);
-          }
-      });
-
-      // If no exact matches, try Delhivery prefix match (ignore last digit)
-      if (matchingIndices.length === 0 && normalizedInput.length > 1) {
+      // If no exact match, try Delhivery prefix match from its map
+      if (normalizedInput.length > 1) {
           const inputPrefix = normalizedInput.slice(0, -1);
           // Check if prefix is numeric and not empty
           if (inputPrefix.length > 0 && /^\d+$/.test(inputPrefix)) {
-              awbList.forEach((item, index) => {
-                  const itemLower = item.awb.toLowerCase();
-                  // Ensure item AWB is long enough and courier matches Delhivery
-                  if (itemLower.length > 1 && item.courierPartner?.toLowerCase().includes("delhivery")) {
-                      const itemPrefix = itemLower.slice(0, -1);
-                      // Ensure item prefix is also numeric and matches input prefix
-                      if (/^\d+$/.test(itemPrefix) && itemPrefix === inputPrefix) {
-                          matchingIndices.push(index);
-                      }
-                  }
-              });
+               const prefixMatches = delhiveryPrefixMap.get(inputPrefix);
+               if (prefixMatches && prefixMatches.length > 0) {
+                   return prefixMatches;
+               }
           }
       }
 
-      return matchingIndices;
-  }, [awbList]);
+      return [];
+  }, [awbMap, delhiveryPrefixMap]);
 
 
   const handleAwbInputChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -569,7 +586,7 @@ export default function ReturnVerification() {
         }
 
         setIsVerifying(false); // Verification finished
-      }, 150); // 150ms debounce (changed from 300ms)
+      }, 50); // 50ms debounce (changed from 150ms)
 
     } else {
         // Input too short or no list, ensure verifying state is off
@@ -925,3 +942,5 @@ export default function ReturnVerification() {
   );
 }
 
+
+    
