@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils"; // Import cn for conditional classes
 
 
@@ -91,6 +92,7 @@ export default function ReturnVerification() {
   const verificationDebounceTimerRef = useRef<NodeJS.Timeout | null>(null); // For debouncing verification
   const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error/info
   const awbInputRef = useRef<HTMLInputElement>(null); // Ref for the AWB input field
+  const [selectedAwbs, setSelectedAwbs] = useState<Set<string>>(new Set());
 
 
   // Cleanup timers on component unmount
@@ -137,6 +139,7 @@ export default function ReturnVerification() {
     setCurrentAwb("");
     setVerificationStatus('idle');
     setVerificationMessage(null);
+    setSelectedAwbs(new Set()); // Reset selection on new file upload
     // Clear any pending timers
     if (verificationDebounceTimerRef.current) clearTimeout(verificationDebounceTimerRef.current);
     if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current);
@@ -732,6 +735,25 @@ export default function ReturnVerification() {
   }, [awbList, toast]);
 
 
+  const handleMarkSelectedAsReceived = useCallback(() => {
+    if (selectedAwbs.size === 0) return;
+
+    const updatedList = awbList.map(item => {
+      if (selectedAwbs.has(item.awb)) {
+        return { ...item, received: true };
+      }
+      return item;
+    });
+
+    setAwbList(updatedList);
+    toast({
+      title: "Items Marked as Received",
+      description: `${selectedAwbs.size} shipment(s) have been updated.`,
+    });
+    setSelectedAwbs(new Set()); // Clear selection after marking
+  }, [awbList, selectedAwbs, toast]);
+
+
     const missingAwbsTable = useMemo(() => {
         if (missingAwbs.length === 0) {
             return (
@@ -753,11 +775,40 @@ export default function ReturnVerification() {
             );
         }
 
+        const handleSelectAll = (checked: boolean | "indeterminate") => {
+            if (checked === true) {
+                const allMissingAwbs = new Set(missingAwbs.map(item => item.awb));
+                setSelectedAwbs(allMissingAwbs);
+            } else {
+                setSelectedAwbs(new Set());
+            }
+        };
+
+        const handleSelect = (awb: string, isSelected: boolean) => {
+            const newSelection = new Set(selectedAwbs);
+            if (isSelected) {
+                newSelection.add(awb);
+            } else {
+                newSelection.delete(awb);
+            }
+            setSelectedAwbs(newSelection);
+        };
+
+        const isAllSelected = selectedAwbs.size > 0 && selectedAwbs.size === missingAwbs.length;
+        const isPartiallySelected = selectedAwbs.size > 0 && selectedAwbs.size < missingAwbs.length;
+
         return (
             <ScrollArea className="h-[450px] border-t">
                 <div className="overflow-x-auto">
                     <Table>
                         <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
+                            <TableHead className="w-[50px]">
+                                <Checkbox
+                                    checked={isAllSelected ? true : isPartiallySelected ? "indeterminate" : false}
+                                    onCheckedChange={handleSelectAll}
+                                    aria-label="Select all"
+                                />
+                            </TableHead>
                             <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
                             <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
                             <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
@@ -770,8 +821,23 @@ export default function ReturnVerification() {
                         missingAwbs.map((item, index) => {
                             const highlightQty = shouldHighlightQty(item.qty);
                             const highlightReason = shouldHighlightReason(item.returnReason);
+                            const isSelected = selectedAwbs.has(item.awb);
                             return (
-                                <TableRow key={`${item.awb}-${item.suborderId}-${index}`} className="hover:bg-muted/30"><TableCell className="font-medium break-words">{item.awb}</TableCell><TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell><TableCell className="text-xs whitespace-normal">
+                                <TableRow
+                                    key={`${item.awb}-${item.suborderId}-${index}`}
+                                    data-state={isSelected && "selected"}
+                                    className="hover:bg-muted/30"
+                                >
+                                <TableCell>
+                                    <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={(checked) => handleSelect(item.awb, !!checked)}
+                                        aria-label={`Select row for AWB ${item.awb}`}
+                                    />
+                                </TableCell>
+                                <TableCell className="font-medium break-words">{item.awb}</TableCell>
+                                <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell>
+                                <TableCell className="text-xs whitespace-normal">
                                     <div>SKU: {item.sku || '-'}</div>
                                     <div>Cat: {item.category || '-'}</div>
                                     <div>
@@ -779,9 +845,14 @@ export default function ReturnVerification() {
                                            Qty: {item.qty || '-'}
                                        </span> | Size: {item.size || '-'}
                                     </div>
-                                </TableCell><TableCell className="break-words">{item.suborderId || '-'}</TableCell><TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
+                                </TableCell>
+                                <TableCell className="break-words">{item.suborderId || '-'}</TableCell>
+                                <TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
                                      {item.returnReason || '-'}
-                                 </TableCell><TableCell className="break-words">{item.returnType || '-'}</TableCell><TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell></TableRow>
+                                 </TableCell>
+                                <TableCell className="break-words">{item.returnType || '-'}</TableCell>
+                                <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell>
+                                </TableRow>
                              );
                            })}
                         </TableBody>
@@ -789,7 +860,7 @@ export default function ReturnVerification() {
                 </div>
             </ScrollArea>
         );
-    }, [missingAwbs]);
+    }, [missingAwbs, selectedAwbs]);
 
 
   return (
@@ -939,10 +1010,28 @@ export default function ReturnVerification() {
             {missingAwbsTable}
           </CardContent>
            {missingAwbs.length > 0 && (
-             <CardFooter className="bg-muted/50 p-4 border-t">
-               <p className="text-sm text-muted-foreground">
-                   {missingAwbs.length} missing shipment(s) listed above.
-               </p>
+             <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center">
+                <div>
+                   {selectedAwbs.size > 0 && (
+                     <p className="text-sm text-destructive font-medium">
+                       {selectedAwbs.size} item(s) selected.
+                     </p>
+                   )}
+                </div>
+                <div className="flex items-center gap-4">
+                  <p className="text-sm text-muted-foreground">
+                      {missingAwbs.length} missing shipment(s) listed above.
+                  </p>
+                  {selectedAwbs.size > 0 && (
+                    <Button
+                      onClick={handleMarkSelectedAsReceived}
+                      size="sm"
+                    >
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Mark Selected as Received
+                    </Button>
+                  )}
+                </div>
              </CardFooter>
            )}
         </Card>
