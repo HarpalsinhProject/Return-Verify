@@ -93,6 +93,15 @@ export default function ReturnVerification() {
   const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null); // For clearing input after error/info
   const awbInputRef = useRef<HTMLInputElement>(null); // Ref for the AWB input field
   const [selectedAwbs, setSelectedAwbs] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState({
+    awb: '',
+    courierPartner: '',
+    productDetails: '',
+    suborderId: '',
+    returnReason: '',
+    returnType: '',
+    deliveredOn: '',
+  });
 
 
   // Cleanup timers on component unmount
@@ -140,6 +149,15 @@ export default function ReturnVerification() {
     setVerificationStatus('idle');
     setVerificationMessage(null);
     setSelectedAwbs(new Set()); // Reset selection on new file upload
+    setFilters({ // Also reset filters
+      awb: '',
+      courierPartner: '',
+      productDetails: '',
+      suborderId: '',
+      returnReason: '',
+      returnType: '',
+      deliveredOn: '',
+    });
     // Clear any pending timers
     if (verificationDebounceTimerRef.current) clearTimeout(verificationDebounceTimerRef.current);
     if (clearInputTimerRef.current) clearTimeout(clearInputTimerRef.current);
@@ -602,7 +620,27 @@ export default function ReturnVerification() {
   };
 
 
-  const missingAwbs = useMemo(() => awbList.filter((item) => !item.received), [awbList]);
+  const missingAwbs = useMemo(() => {
+    return awbList.filter((item) => {
+        if (item.received) return false;
+
+        const f = filters;
+        const check = (value: string | undefined, filter: string) =>
+            !filter || (value && value.toLowerCase().includes(filter.toLowerCase()));
+
+        const productDetailsString = `${item.sku} ${item.category} ${item.qty} ${item.size}`;
+
+        return (
+            check(item.awb, f.awb) &&
+            check(item.courierPartner, f.courierPartner) &&
+            check(productDetailsString, f.productDetails) &&
+            check(item.suborderId, f.suborderId) &&
+            check(item.returnReason, f.returnReason) &&
+            check(item.returnType, f.returnType) &&
+            check(formatDate(item.deliveredOn), f.deliveredOn)
+        );
+    });
+}, [awbList, filters]);
   const receivedAwbs = useMemo(() => awbList.filter((item) => item.received), [awbList]);
   const receivedCount = receivedAwbs.length;
 
@@ -753,8 +791,19 @@ export default function ReturnVerification() {
     setSelectedAwbs(new Set()); // Clear selection after marking
   }, [awbList, selectedAwbs, toast]);
 
+  const handleFilterChange = (column: keyof typeof filters, value: string) => {
+    setFilters(prev => ({ ...prev, [column]: value }));
+  };
 
     const missingAwbsTable = useMemo(() => {
+        if (awbList.length > 0 && missingAwbs.length === 0 && Object.values(filters).some(f => f)) {
+             return (
+                 <div className="p-6 text-center text-muted-foreground">
+                     No missing items match the current filters.
+                 </div>
+             );
+        }
+
         if (missingAwbs.length === 0) {
             return (
               <div className="p-6">
@@ -777,8 +826,9 @@ export default function ReturnVerification() {
 
         const handleSelectAll = (checked: boolean | "indeterminate") => {
             if (checked === true) {
-                const allMissingAwbs = new Set(missingAwbs.map(item => item.awb));
-                setSelectedAwbs(allMissingAwbs);
+                // Select only the currently visible (filtered) items
+                const allVisibleMissingAwbs = new Set(missingAwbs.map(item => item.awb));
+                setSelectedAwbs(allVisibleMissingAwbs);
             } else {
                 setSelectedAwbs(new Set());
             }
@@ -794,19 +844,22 @@ export default function ReturnVerification() {
             setSelectedAwbs(newSelection);
         };
 
-        const isAllSelected = selectedAwbs.size > 0 && selectedAwbs.size === missingAwbs.length;
-        const isPartiallySelected = selectedAwbs.size > 0 && selectedAwbs.size < missingAwbs.length;
+        // Adjust selection state based on filtered list
+        const visibleSelectedCount = missingAwbs.filter(item => selectedAwbs.has(item.awb)).length;
+        const isAllSelected = visibleSelectedCount > 0 && visibleSelectedCount === missingAwbs.length;
+        const isPartiallySelected = visibleSelectedCount > 0 && visibleSelectedCount < missingAwbs.length;
 
         return (
             <ScrollArea className="h-[450px] border-t">
                 <div className="overflow-x-auto">
                     <Table>
-                        <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm"><TableRow>
+                        <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
+                          <TableRow>
                             <TableHead className="w-[50px]">
                                 <Checkbox
                                     checked={isAllSelected ? true : isPartiallySelected ? "indeterminate" : false}
                                     onCheckedChange={handleSelectAll}
-                                    aria-label="Select all"
+                                    aria-label="Select all visible"
                                 />
                             </TableHead>
                             <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
@@ -816,7 +869,18 @@ export default function ReturnVerification() {
                             <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
                             <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
                             <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
-                        </TableRow></TableHeader>
+                        </TableRow>
+                        <TableRow className="bg-muted/60">
+                            <TableHead></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.awb} onChange={e => handleFilterChange('awb', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.courierPartner} onChange={e => handleFilterChange('courierPartner', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.productDetails} onChange={e => handleFilterChange('productDetails', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.suborderId} onChange={e => handleFilterChange('suborderId', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.returnReason} onChange={e => handleFilterChange('returnReason', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.returnType} onChange={e => handleFilterChange('returnType', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter..." value={filters.deliveredOn} onChange={e => handleFilterChange('deliveredOn', e.target.value)} className="h-8" /></TableHead>
+                        </TableRow>
+                        </TableHeader>
                         <TableBody>{
                         missingAwbs.map((item, index) => {
                             const highlightQty = shouldHighlightQty(item.qty);
@@ -860,7 +924,7 @@ export default function ReturnVerification() {
                 </div>
             </ScrollArea>
         );
-    }, [missingAwbs, selectedAwbs]);
+    }, [missingAwbs, selectedAwbs, filters]);
 
 
   return (
