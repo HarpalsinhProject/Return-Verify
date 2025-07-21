@@ -619,6 +619,37 @@ export default function ReturnVerification() {
     }
   };
 
+  // Helper to format date as DD/MM/YYYY
+  const formatDate = (dateInput: string | number | Date | undefined): string => {
+      if (!dateInput) return '-';
+      try {
+          const date = new Date(dateInput);
+          if (isNaN(date.getTime())) {
+              // If it's not a valid date object, try parsing common string formats
+              if (typeof dateInput === 'string') {
+                   // Handle YYYY-MM-DD from Excel parsing
+                   const parts = dateInput.split('-');
+                   if (parts.length === 3) {
+                       const year = parseInt(parts[0]);
+                       const month = parseInt(parts[1]);
+                       const day = parseInt(parts[2]);
+                       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                            const d = new Date(year, month - 1, day);
+                            if (!isNaN(d.getTime())) {
+                                return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+                            }
+                       }
+                   }
+              }
+              return String(dateInput); // Return original string if parsing fails
+          }
+          return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
+      } catch (e) {
+          console.warn("Could not format date:", dateInput, e);
+          return String(dateInput); // Fallback to string representation
+      }
+  };
+
 
   const missingAwbs = useMemo(() => {
     return awbList.filter((item) => {
@@ -656,38 +687,6 @@ export default function ReturnVerification() {
           default: return null;
        }
   }
-
-  // Helper to format date as DD/MM/YYYY
-  const formatDate = (dateInput: string | number | Date | undefined): string => {
-      if (!dateInput) return '-';
-      try {
-          const date = new Date(dateInput);
-          if (isNaN(date.getTime())) {
-              // If it's not a valid date object, try parsing common string formats
-              if (typeof dateInput === 'string') {
-                   // Handle YYYY-MM-DD from Excel parsing
-                   const parts = dateInput.split('-');
-                   if (parts.length === 3) {
-                       const year = parseInt(parts[0]);
-                       const month = parseInt(parts[1]);
-                       const day = parseInt(parts[2]);
-                       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                            const d = new Date(year, month - 1, day);
-                            if (!isNaN(d.getTime())) {
-                                return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
-                            }
-                       }
-                   }
-              }
-              return String(dateInput); // Return original string if parsing fails
-          }
-          return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
-      } catch (e) {
-          console.warn("Could not format date:", dateInput, e);
-          return String(dateInput); // Fallback to string representation
-      }
-  };
-
 
   // Updated handleDownloadReport to use new fields and logic
   const handleDownloadReport = useCallback(() => {
@@ -924,7 +923,7 @@ export default function ReturnVerification() {
                 </div>
             </ScrollArea>
         );
-    }, [missingAwbs, selectedAwbs, filters]);
+    }, [missingAwbs, selectedAwbs, filters, awbList.length]);
 
 
   return (
