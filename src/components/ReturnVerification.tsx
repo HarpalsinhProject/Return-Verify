@@ -935,16 +935,6 @@ export default function ReturnVerification() {
                             <TableHead className="min-w-[130px] font-semibold flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></TableHead>
                             <TableHead className="min-w-[100px] font-semibold flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></TableHead>
                         </TableRow>
-                        <TableRow className="bg-muted/60">
-                            <TableHead></TableHead>
-                            <TableHead><Input placeholder="Filter AWB..." value={filters.awb} onChange={e => handleTextFilterChange('awb', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead></TableHead>
-                            <TableHead><Input placeholder="Filter Product..." value={filters.productDetails} onChange={e => handleTextFilterChange('productDetails', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter Suborder..." value={filters.suborderId} onChange={e => handleTextFilterChange('suborderId', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter Reason..." value={filters.returnReason} onChange={e => handleTextFilterChange('returnReason', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead></TableHead>
-                            <TableHead></TableHead>
-                        </TableRow>
                         </TableHeader>
                         <TableBody>{
                         missingAwbs.map((item, index) => {
@@ -1168,5 +1158,3 @@ export default function ReturnVerification() {
     </div>
   );
 }
-
-    
