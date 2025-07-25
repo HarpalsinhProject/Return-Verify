@@ -12,8 +12,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Filter } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils"; // Import cn for conditional classes
 
@@ -78,6 +79,37 @@ const playSound = (soundFileUrl: string) => {
   }
 };
 
+// Helper to format date as DD/MM/YYYY for consistent filtering/display
+const formatDate = (dateInput: string | number | Date | undefined): string => {
+    if (!dateInput) return '-';
+    try {
+        const date = new Date(dateInput);
+        if (isNaN(date.getTime())) {
+            // If it's not a valid date object, try parsing common string formats
+            if (typeof dateInput === 'string') {
+                 // Handle YYYY-MM-DD from Excel parsing
+                 const parts = dateInput.split('-');
+                 if (parts.length === 3) {
+                     const year = parseInt(parts[0]);
+                     const month = parseInt(parts[1]);
+                     const day = parseInt(parts[2]);
+                     if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                          const d = new Date(year, month - 1, day);
+                          if (!isNaN(d.getTime())) {
+                              return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
+                          }
+                     }
+                 }
+            }
+            return String(dateInput); // Return original string if parsing fails
+        }
+        return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
+    } catch (e) {
+        console.warn("Could not format date:", dateInput, e);
+        return String(dateInput); // Fallback to string representation
+    }
+};
+
 
 export default function ReturnVerification() {
   const [awbList, setAwbList] = useState<ReturnItem[]>([]);
@@ -95,12 +127,12 @@ export default function ReturnVerification() {
   const [selectedAwbs, setSelectedAwbs] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
     awb: '',
-    courierPartner: '',
+    courierPartner: new Set<string>(), // Changed to Set
     productDetails: '',
     suborderId: '',
     returnReason: '',
-    returnType: '',
-    deliveredOn: '',
+    returnType: new Set<string>(), // Changed to Set
+    deliveredOn: new Set<string>(), // Changed to Set
   });
 
 
@@ -151,12 +183,12 @@ export default function ReturnVerification() {
     setSelectedAwbs(new Set()); // Reset selection on new file upload
     setFilters({ // Also reset filters
       awb: '',
-      courierPartner: '',
       productDetails: '',
       suborderId: '',
       returnReason: '',
-      returnType: '',
-      deliveredOn: '',
+      courierPartner: new Set(),
+      returnType: new Set(),
+      deliveredOn: new Set(),
     });
     // Clear any pending timers
     if (verificationDebounceTimerRef.current) clearTimeout(verificationDebounceTimerRef.current);
@@ -619,38 +651,6 @@ export default function ReturnVerification() {
     }
   };
 
-  // Helper to format date as DD/MM/YYYY
-  const formatDate = (dateInput: string | number | Date | undefined): string => {
-      if (!dateInput) return '-';
-      try {
-          const date = new Date(dateInput);
-          if (isNaN(date.getTime())) {
-              // If it's not a valid date object, try parsing common string formats
-              if (typeof dateInput === 'string') {
-                   // Handle YYYY-MM-DD from Excel parsing
-                   const parts = dateInput.split('-');
-                   if (parts.length === 3) {
-                       const year = parseInt(parts[0]);
-                       const month = parseInt(parts[1]);
-                       const day = parseInt(parts[2]);
-                       if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-                            const d = new Date(year, month - 1, day);
-                            if (!isNaN(d.getTime())) {
-                                return d.toLocaleDateString('en-GB'); // DD/MM/YYYY
-                            }
-                       }
-                   }
-              }
-              return String(dateInput); // Return original string if parsing fails
-          }
-          return date.toLocaleDateString('en-GB'); // DD/MM/YYYY
-      } catch (e) {
-          console.warn("Could not format date:", dateInput, e);
-          return String(dateInput); // Fallback to string representation
-      }
-  };
-
-
   const missingAwbs = useMemo(() => {
     return awbList.filter((item) => {
         if (item.received) return false;
@@ -659,19 +659,23 @@ export default function ReturnVerification() {
         const check = (value: string | undefined, filter: string) =>
             !filter || (value && value.toLowerCase().includes(filter.toLowerCase()));
 
+        const checkSet = (value: string | undefined, filterSet: Set<string>) =>
+            filterSet.size === 0 || (value && filterSet.has(value));
+
         const productDetailsString = `${item.sku} ${item.category} ${item.qty} ${item.size}`;
 
         return (
             check(item.awb, f.awb) &&
-            check(item.courierPartner, f.courierPartner) &&
+            checkSet(item.courierPartner, f.courierPartner) &&
             check(productDetailsString, f.productDetails) &&
             check(item.suborderId, f.suborderId) &&
             check(item.returnReason, f.returnReason) &&
-            check(item.returnType, f.returnType) &&
-            check(formatDate(item.deliveredOn), f.deliveredOn)
+            checkSet(item.returnType, f.returnType) &&
+            checkSet(formatDate(item.deliveredOn), f.deliveredOn)
         );
     });
-}, [awbList, filters]);
+  }, [awbList, filters]);
+
   const receivedAwbs = useMemo(() => awbList.filter((item) => item.received), [awbList]);
   const receivedCount = receivedAwbs.length;
 
@@ -790,12 +794,31 @@ export default function ReturnVerification() {
     setSelectedAwbs(new Set()); // Clear selection after marking
   }, [awbList, selectedAwbs, toast]);
 
-  const handleFilterChange = (column: keyof typeof filters, value: string) => {
+  const handleTextFilterChange = (column: 'awb' | 'productDetails' | 'suborderId' | 'returnReason', value: string) => {
     setFilters(prev => ({ ...prev, [column]: value }));
   };
 
+  const handleCheckboxFilterChange = (
+    column: 'courierPartner' | 'returnType' | 'deliveredOn',
+    value: string,
+    checked: boolean
+  ) => {
+      setFilters(prev => {
+          const newSet = new Set(prev[column]);
+          if (checked) {
+              newSet.add(value);
+          } else {
+              newSet.delete(value);
+          }
+          return { ...prev, [column]: newSet };
+      });
+  };
+
     const missingAwbsTable = useMemo(() => {
-        if (awbList.length > 0 && missingAwbs.length === 0 && Object.values(filters).some(f => f)) {
+        const textFiltersApplied = filters.awb || filters.productDetails || filters.suborderId || filters.returnReason;
+        const checkboxFiltersApplied = filters.courierPartner.size > 0 || filters.returnType.size > 0 || filters.deliveredOn.size > 0;
+
+        if (awbList.length > 0 && missingAwbs.length === 0 && (textFiltersApplied || checkboxFiltersApplied)) {
              return (
                  <div className="p-6 text-center text-muted-foreground">
                      No missing items match the current filters.
@@ -843,6 +866,49 @@ export default function ReturnVerification() {
             setSelectedAwbs(newSelection);
         };
 
+        const FilterPopover = ({ column, title }: { column: 'courierPartner' | 'returnType' | 'deliveredOn', title: string }) => {
+            const options = useMemo(() => {
+                const uniqueValues = new Set(awbList.map(item => {
+                    if (column === 'deliveredOn') {
+                        return formatDate(item.deliveredOn);
+                    }
+                    return item[column] || 'Unknown';
+                }));
+                return Array.from(uniqueValues).sort();
+            }, [column]);
+
+            const activeFilters = filters[column];
+
+            return (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" size="sm" className={cn("h-8 ml-2 p-1", activeFilters.size > 0 && "text-accent")}>
+                           <Filter className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-0" align="start">
+                        <div className="p-2 font-bold border-b">{title}</div>
+                        <ScrollArea className="h-[200px]">
+                          <div className="p-2 space-y-2">
+                            {options.map(option => (
+                                <div key={option} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`${column}-${option}`}
+                                        checked={activeFilters.has(option)}
+                                        onCheckedChange={(checked) => handleCheckboxFilterChange(column, option, !!checked)}
+                                    />
+                                    <label htmlFor={`${column}-${option}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        {option}
+                                    </label>
+                                </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                    </PopoverContent>
+                </Popover>
+            );
+        };
+
         // Adjust selection state based on filtered list
         const visibleSelectedCount = missingAwbs.filter(item => selectedAwbs.has(item.awb)).length;
         const isAllSelected = visibleSelectedCount > 0 && visibleSelectedCount === missingAwbs.length;
@@ -862,22 +928,22 @@ export default function ReturnVerification() {
                                 />
                             </TableHead>
                             <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
-                            <TableHead className="min-w-[150px] font-semibold flex items-center gap-1"><Truck size={16} /> Courier</TableHead>
+                            <TableHead className="min-w-[150px] font-semibold flex items-center"><Truck size={16} /> Courier <FilterPopover column="courierPartner" title="Filter by Courier" /></TableHead>
                             <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
                             <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
                             <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
-                            <TableHead className="min-w-[130px] font-semibold">Return Type</TableHead>
-                            <TableHead className="min-w-[100px] font-semibold">Delivered On</TableHead>
+                            <TableHead className="min-w-[130px] font-semibold flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></TableHead>
+                            <TableHead className="min-w-[100px] font-semibold flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></TableHead>
                         </TableRow>
                         <TableRow className="bg-muted/60">
                             <TableHead></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.awb} onChange={e => handleFilterChange('awb', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.courierPartner} onChange={e => handleFilterChange('courierPartner', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.productDetails} onChange={e => handleFilterChange('productDetails', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.suborderId} onChange={e => handleFilterChange('suborderId', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.returnReason} onChange={e => handleFilterChange('returnReason', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.returnType} onChange={e => handleFilterChange('returnType', e.target.value)} className="h-8" /></TableHead>
-                            <TableHead><Input placeholder="Filter..." value={filters.deliveredOn} onChange={e => handleFilterChange('deliveredOn', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter AWB..." value={filters.awb} onChange={e => handleTextFilterChange('awb', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead></TableHead>
+                            <TableHead><Input placeholder="Filter Product..." value={filters.productDetails} onChange={e => handleTextFilterChange('productDetails', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter Suborder..." value={filters.suborderId} onChange={e => handleTextFilterChange('suborderId', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead><Input placeholder="Filter Reason..." value={filters.returnReason} onChange={e => handleTextFilterChange('returnReason', e.target.value)} className="h-8" /></TableHead>
+                            <TableHead></TableHead>
+                            <TableHead></TableHead>
                         </TableRow>
                         </TableHeader>
                         <TableBody>{
@@ -923,7 +989,7 @@ export default function ReturnVerification() {
                 </div>
             </ScrollArea>
         );
-    }, [missingAwbs, selectedAwbs, filters, awbList.length]);
+    }, [missingAwbs, selectedAwbs, filters, awbList]);
 
 
   return (
@@ -1102,3 +1168,5 @@ export default function ReturnVerification() {
     </div>
   );
 }
+
+    
