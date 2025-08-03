@@ -928,12 +928,12 @@ export default function ReturnVerification() {
                                 />
                             </TableHead>
                             <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
-                            <TableHead className="min-w-[150px] font-semibold flex items-center"><Truck size={16} /> Courier <FilterPopover column="courierPartner" title="Filter by Courier" /></TableHead>
-                            <TableHead className="font-semibold min-w-[200px]"><Package size={16} className="inline mr-1"/> Product Details</TableHead>
-                            <TableHead className="min-w-[120px] font-semibold">Suborder ID</TableHead>
-                            <TableHead className="min-w-[130px] font-semibold">Return Reason</TableHead>
-                            <TableHead className="min-w-[130px] font-semibold flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></TableHead>
-                            <TableHead className="min-w-[100px] font-semibold flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></TableHead>
+                            <TableHead className="min-w-[150px] font-semibold whitespace-nowrap"><div className="flex items-center"><Truck size={16} className="mr-1"/> Courier <FilterPopover column="courierPartner" title="Filter by Courier" /></div></TableHead>
+                            <TableHead className="font-semibold min-w-[200px] whitespace-nowrap"><div className="flex items-center"><Package size={16} className="mr-1"/> Product Details</div></TableHead>
+                            <TableHead className="min-w-[120px] font-semibold whitespace-nowrap">Suborder ID</TableHead>
+                            <TableHead className="min-w-[130px] font-semibold whitespace-nowrap">Return Reason</TableHead>
+                            <TableHead className="min-w-[130px] font-semibold whitespace-nowrap"><div className="flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></div></TableHead>
+                            <TableHead className="min-w-[100px] font-semibold whitespace-nowrap"><div className="flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></div></TableHead>
                         </TableRow>
                         </TableHeader>
                         <TableBody>{
@@ -1158,3 +1158,5 @@ export default function ReturnVerification() {
     </div>
   );
 }
+
+    
