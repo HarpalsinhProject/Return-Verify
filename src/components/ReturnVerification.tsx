@@ -1114,6 +1114,15 @@ export default function ReturnVerification() {
         </Card>
       )}
 
+      {/* Advertisement Section */}
+      {awbList.length > 0 && (
+          <div className="my-8 flex justify-center items-center">
+              <Card className="w-[728px] h-[90px] flex justify-center items-center bg-muted/50">
+                  <p className="text-muted-foreground">Advertisement - 728x90</p>
+              </Card>
+          </div>
+      )}
+
       {/* Missing AWB Report Card */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
