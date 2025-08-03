@@ -1158,5 +1158,3 @@ export default function ReturnVerification() {
     </div>
   );
 }
-
-    
