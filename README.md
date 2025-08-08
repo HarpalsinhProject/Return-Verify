@@ -1,9 +1,7 @@
-# Firebase Studio
+# Return-Verify
 
-This is a NextJS starter in Firebase Studio.
+This is a NextJS Project.
 
 To get started, take a look at src/app/page.tsx.
-# Return-Verify
-# ReturnChecker
 
-Build&Earn=100%
+It will helip the E-Commerce Seller to verify received Return.
