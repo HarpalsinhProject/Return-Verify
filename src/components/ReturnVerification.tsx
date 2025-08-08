@@ -8,7 +8,7 @@ import type { Range } from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
@@ -915,8 +915,7 @@ export default function ReturnVerification() {
         const isPartiallySelected = visibleSelectedCount > 0 && visibleSelectedCount < missingAwbs.length;
 
         return (
-            <ScrollArea className="h-[450px] border-t">
-              <div className="relative overflow-x-auto">
+            <ScrollArea className="h-[450px] border-t whitespace-nowrap">
                 <Table>
                     <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
                       <TableRow>
@@ -976,7 +975,7 @@ export default function ReturnVerification() {
                        })}
                     </TableBody>
                 </Table>
-              </div>
+              <ScrollBar orientation="horizontal" />
             </ScrollArea>
         );
     }, [missingAwbs, selectedAwbs, filters, awbList]);
