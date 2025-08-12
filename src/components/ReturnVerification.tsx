@@ -64,7 +64,7 @@ const shouldHighlightQty = (qty?: string): boolean => {
 };
 
 // Helper function to play sounds
-// IMPORTANT: User needs to place verify-success.mp3 and verify-oops.mp3 in the /public/sounds/ directory
+// IMPORTANT: User needs to place verify-success.mp3, verify-oops.mp3, and verify-alert.mp3 in the /public/sounds/ directory
 const playSound = (soundFileUrl: string) => {
   if (typeof window !== 'undefined') { // Ensure this only runs on the client
     try {
@@ -595,7 +595,14 @@ export default function ReturnVerification() {
                     // Conditionally add destructive border class
                     className: cn(needsHighlight && "border-destructive border-2"),
                 });
-                playSound('/sounds/verify-success.mp3'); // Play success sound
+                
+                // Play sound based on highlight status
+                if (needsHighlight) {
+                    playSound('/sounds/verify-alert.mp3'); // Play special alert sound
+                } else {
+                    playSound('/sounds/verify-success.mp3'); // Play normal success sound
+                }
+
                 setCurrentAwb(""); // Clear input on success
                 awbInputRef.current?.focus(); // Refocus the input field
                 currentMessage = null; // Clear any previous simple message
