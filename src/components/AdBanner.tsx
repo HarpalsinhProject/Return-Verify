@@ -39,7 +39,7 @@ const AdBanner = () => {
         data-ad-slot={adSlot}
       ></ins>
        {/* Fallback content in case the ad doesn't load */}
-      <p className="text-muted-foreground">Advertisement - 728x90</p>
+      <p className="text-muted-foreground absolute">Advertisement - 728x90</p>
     </Card>
   );
 };
