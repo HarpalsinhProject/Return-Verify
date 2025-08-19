@@ -12,7 +12,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Filter } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Filter, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -822,6 +822,31 @@ export default function ReturnVerification() {
       });
   };
 
+  const clearFilters = () => {
+    setFilters({
+      awb: '',
+      productDetails: '',
+      suborderId: '',
+      returnReason: '',
+      courierPartner: new Set(),
+      returnType: new Set(),
+      deliveredOn: new Set(),
+    });
+  };
+
+  const areFiltersApplied = useMemo(() => {
+    return (
+      filters.awb !== '' ||
+      filters.productDetails !== '' ||
+      filters.suborderId !== '' ||
+      filters.returnReason !== '' ||
+      filters.courierPartner.size > 0 ||
+      filters.returnType.size > 0 ||
+      filters.deliveredOn.size > 0
+    );
+  }, [filters]);
+
+
     const missingAwbsTable = useMemo(() => {
         const textFiltersApplied = filters.awb || filters.productDetails || filters.suborderId || filters.returnReason;
         const checkboxFiltersApplied = filters.courierPartner.size > 0 || filters.returnType.size > 0 || filters.deliveredOn.size > 0;
@@ -1140,13 +1165,26 @@ export default function ReturnVerification() {
       {/* Missing AWB Report Card */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
-          <CardHeader className="bg-destructive/10 dark:bg-destructive/20">
-            <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3 text-destructive">
-              <AlertTriangle className="h-6 w-6" /> Missing AWB Report ({missingAwbs.length})
-            </CardTitle>
-            <CardDescription className="pt-1 text-destructive/90">
-              Shipments from the sheet whose AWB has not been scanned/verified as received.
-            </CardDescription>
+          <CardHeader className="bg-destructive/10 dark:bg-destructive/20 flex flex-row justify-between items-center">
+             <div>
+                <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3 text-destructive">
+                  <AlertTriangle className="h-6 w-6" /> Missing AWB Report ({missingAwbs.length})
+                </CardTitle>
+                <CardDescription className="pt-1 text-destructive/90">
+                  Shipments from the sheet whose AWB has not been scanned/verified as received.
+                </CardDescription>
+             </div>
+             {areFiltersApplied && (
+                <Button
+                  onClick={clearFilters}
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Clear Filters
+                </Button>
+             )}
           </CardHeader>
           <CardContent className="p-0">
             {missingAwbsTable}
