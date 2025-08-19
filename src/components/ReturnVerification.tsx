@@ -1008,6 +1008,7 @@ export default function ReturnVerification() {
                        })}
                     </TableBody>
                 </Table>
+                <ScrollBar orientation="horizontal" />
             </ScrollArea>
         );
     }, [missingAwbs, selectedAwbs, filters, awbList]);
