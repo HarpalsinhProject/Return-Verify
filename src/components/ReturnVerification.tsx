@@ -908,7 +908,7 @@ export default function ReturnVerification() {
                     return item[column] || 'Unknown';
                 }));
                 return Array.from(uniqueValues).sort();
-            }, [column]);
+            }, [column, awbList]);
 
             const activeFilters = filters[column];
 
@@ -921,7 +921,7 @@ export default function ReturnVerification() {
                     </PopoverTrigger>
                     <PopoverContent className="w-64 p-0" align="start">
                         <div className="p-2 font-bold border-b">{title}</div>
-                        <ScrollArea className="h-[200px]">
+                        <ScrollArea className="max-h-[200px]">
                           <div className="p-2 space-y-2">
                             {options.map(option => (
                                 <div key={option} className="flex items-center space-x-2">
@@ -948,69 +948,66 @@ export default function ReturnVerification() {
         const isPartiallySelected = visibleSelectedCount > 0 && visibleSelectedCount < missingAwbs.length;
 
         return (
-            <ScrollArea className="h-[450px] border-t whitespace-nowrap">
-                <div className="relative overflow-x-auto">
-                    <Table>
-                        <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
-                          <TableRow>
-                            <TableHead className="w-[50px]">
+            <ScrollArea className="h-[450px] border-t whitespace-nowrap" orientation="both">
+                <Table>
+                    <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
+                      <TableRow>
+                        <TableHead className="w-[50px]">
+                            <Checkbox
+                                checked={isAllSelected ? true : isPartiallySelected ? "indeterminate" : false}
+                                onCheckedChange={handleSelectAll}
+                                aria-label="Select all visible"
+                            />
+                        </TableHead>
+                        <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
+                        <TableHead className="min-w-[150px] font-semibold whitespace-nowrap"><div className="flex items-center"><Truck size={16} className="mr-1"/> Courier <FilterPopover column="courierPartner" title="Filter by Courier" /></div></TableHead>
+                        <TableHead className="font-semibold min-w-[200px] whitespace-nowrap"><div className="flex items-center"><Package size={16} className="mr-1"/> Product Details</div></TableHead>
+                        <TableHead className="min-w-[120px] font-semibold whitespace-nowrap">Suborder ID</TableHead>
+                        <TableHead className="min-w-[130px] font-semibold whitespace-nowrap">Return Reason</TableHead>
+                        <TableHead className="min-w-[130px] font-semibold whitespace-nowrap"><div className="flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></div></TableHead>
+                        <TableHead className="min-w-[100px] font-semibold whitespace-nowrap"><div className="flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></div></TableHead>
+                    </TableRow>
+                    </TableHeader>
+                    <TableBody>{
+                    missingAwbs.map((item, index) => {
+                        const highlightQty = shouldHighlightQty(item.qty);
+                        const highlightReason = shouldHighlightReason(item.returnReason);
+                        const isSelected = selectedAwbs.has(item.awb);
+                        return (
+                            <TableRow
+                                key={`${item.awb}-${item.suborderId}-${index}`}
+                                data-state={isSelected && "selected"}
+                                className="hover:bg-muted/30"
+                            >
+                            <TableCell>
                                 <Checkbox
-                                    checked={isAllSelected ? true : isPartiallySelected ? "indeterminate" : false}
-                                    onCheckedChange={handleSelectAll}
-                                    aria-label="Select all visible"
+                                    checked={isSelected}
+                                    onCheckedChange={(checked) => handleSelect(item.awb, !!checked)}
+                                    aria-label={`Select row for AWB ${item.awb}`}
                                 />
-                            </TableHead>
-                            <TableHead className="w-[150px] min-w-[150px] font-semibold">AWB Number</TableHead>
-                            <TableHead className="min-w-[150px] font-semibold whitespace-nowrap"><div className="flex items-center"><Truck size={16} className="mr-1"/> Courier <FilterPopover column="courierPartner" title="Filter by Courier" /></div></TableHead>
-                            <TableHead className="font-semibold min-w-[200px] whitespace-nowrap"><div className="flex items-center"><Package size={16} className="mr-1"/> Product Details</div></TableHead>
-                            <TableHead className="min-w-[120px] font-semibold whitespace-nowrap">Suborder ID</TableHead>
-                            <TableHead className="min-w-[130px] font-semibold whitespace-nowrap">Return Reason</TableHead>
-                            <TableHead className="min-w-[130px] font-semibold whitespace-nowrap"><div className="flex items-center">Return Type <FilterPopover column="returnType" title="Filter by Return Type" /></div></TableHead>
-                            <TableHead className="min-w-[100px] font-semibold whitespace-nowrap"><div className="flex items-center">Delivered On <FilterPopover column="deliveredOn" title="Filter by Delivered Date" /></div></TableHead>
-                        </TableRow>
-                        </TableHeader>
-                        <TableBody>{
-                        missingAwbs.map((item, index) => {
-                            const highlightQty = shouldHighlightQty(item.qty);
-                            const highlightReason = shouldHighlightReason(item.returnReason);
-                            const isSelected = selectedAwbs.has(item.awb);
-                            return (
-                                <TableRow
-                                    key={`${item.awb}-${item.suborderId}-${index}`}
-                                    data-state={isSelected && "selected"}
-                                    className="hover:bg-muted/30"
-                                >
-                                <TableCell>
-                                    <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={(checked) => handleSelect(item.awb, !!checked)}
-                                        aria-label={`Select row for AWB ${item.awb}`}
-                                    />
-                                </TableCell>
-                                <TableCell className="font-medium break-words">{item.awb}</TableCell>
-                                <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell>
-                                <TableCell className="text-xs whitespace-normal">
-                                    <div>SKU: {item.sku || '-'}</div>
-                                    <div>Cat: {item.category || '-'}</div>
-                                    <div>
-                                       <span className={cn(highlightQty && "font-bold text-destructive")}>
-                                           Qty: {item.qty || '-'}
-                                       </span> | Size: {item.size || '-'}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="break-words">{item.suborderId || '-'}</TableCell>
-                                <TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
-                                     {item.returnReason || '-'}
-                                 </TableCell>
-                                <TableCell className="break-words">{item.returnType || '-'}</TableCell>
-                                <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell>
-                                </TableRow>
-                             );
-                           })}
-                        </TableBody>
-                    </Table>
-                </div>
-              <ScrollBar orientation="horizontal" />
+                            </TableCell>
+                            <TableCell className="font-medium break-words">{item.awb}</TableCell>
+                            <TableCell className="break-words">{item.courierPartner || 'Unknown'}</TableCell>
+                            <TableCell className="text-xs whitespace-normal">
+                                <div>SKU: {item.sku || '-'}</div>
+                                <div>Cat: {item.category || '-'}</div>
+                                <div>
+                                   <span className={cn(highlightQty && "font-bold text-destructive")}>
+                                       Qty: {item.qty || '-'}
+                                   </span> | Size: {item.size || '-'}
+                                </div>
+                            </TableCell>
+                            <TableCell className="break-words">{item.suborderId || '-'}</TableCell>
+                            <TableCell className={cn("break-words", highlightReason && "font-bold text-destructive")}>
+                                 {item.returnReason || '-'}
+                             </TableCell>
+                            <TableCell className="break-words">{item.returnType || '-'}</TableCell>
+                            <TableCell className="break-words">{formatDate(item.deliveredOn)}</TableCell>
+                            </TableRow>
+                         );
+                       })}
+                    </TableBody>
+                </Table>
             </ScrollArea>
         );
     }, [missingAwbs, selectedAwbs, filters, awbList]);
