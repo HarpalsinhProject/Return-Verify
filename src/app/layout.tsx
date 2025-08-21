@@ -3,7 +3,6 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster'; // Import Toaster
 import { cn } from '@/lib/utils'; // Import cn utility
-import Script from 'next/script'; // Import Script component
 
 export const metadata: Metadata = {
   title: 'ReturnVerify',
@@ -17,13 +16,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full">
-      {/* Add Google AdSense script */}
-      <Script
-        async
-        src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4831269495709966"
-        crossOrigin="anonymous"
-        strategy="afterInteractive"
-      />
       {/* Removed font variables from body className */}
       {/* Added flex flex-col min-h-screen to body for footer positioning */}
       <body className={cn("antialiased flex flex-col min-h-screen")}>

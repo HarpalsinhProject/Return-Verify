@@ -17,7 +17,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils"; // Import cn for conditional classes
-import AdBanner from "./AdBanner";
 
 
 interface ReturnItem {
@@ -1081,13 +1080,6 @@ export default function ReturnVerification() {
         </CardContent>
       </Card>
       
-      {/* Advertisement Section 2 */}
-      {awbList.length > 0 && (
-        <div className="my-8 flex justify-center items-center">
-            <AdBanner />
-        </div>
-      )}
-
       {/* Verification Card */}
       {awbList.length > 0 && (
         <Card className="shadow-lg rounded-lg overflow-hidden">
@@ -1151,13 +1143,6 @@ export default function ReturnVerification() {
               </Button>
            </CardFooter>
         </Card>
-      )}
-
-      {/* Advertisement Section */}
-      {awbList.length > 0 && (
-        <div className="my-8 flex justify-center items-center">
-            <AdBanner />
-        </div>
       )}
 
       {/* Missing AWB Report Card */}
