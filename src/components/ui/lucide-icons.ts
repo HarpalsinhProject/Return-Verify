@@ -10,5 +10,9 @@ export {
   Download,
   Package,
   Info,
-  FileSpreadsheet
+  FileSpreadsheet,
+  History,
+  Home
 } from 'lucide-react';
+
+    

@@ -5,6 +5,7 @@
 import { useState, useCallback, ChangeEvent, useMemo, useRef, useEffect } from "react"; // Added useRef and useEffect
 import * as XLSX from "xlsx";
 import type { Range } from "xlsx";
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Filter, X } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Filter, X, History } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1078,6 +1079,14 @@ export default function ReturnVerification() {
             </p>
           )}
         </CardContent>
+         <CardFooter className="bg-muted/50 p-4 border-t">
+              <Link href="/resume" passHref>
+                <Button variant="outline">
+                  <History className="mr-2 h-4 w-4" />
+                  Resume Check
+                </Button>
+              </Link>
+          </CardFooter>
       </Card>
       
       {/* Verification Card */}
@@ -1202,3 +1211,5 @@ export default function ReturnVerification() {
     </div>
   );
 }
+
+    
