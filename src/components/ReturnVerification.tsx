@@ -1024,18 +1024,19 @@ export default function ReturnVerification() {
 
       {/* File Upload Card */}
       <Card className="shadow-lg rounded-lg overflow-hidden">
-        <CardHeader className="bg-secondary">
-          <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
-            <FileSpreadsheet className="h-6 w-6" /> Upload Return Data
-          </CardTitle>
-           <TooltipProvider>
-               <Tooltip>
-                   <TooltipTrigger asChild>
+        <CardHeader className="bg-secondary flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
+              <FileSpreadsheet className="h-6 w-6" /> Upload Return Data
+            </CardTitle>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
                       <CardDescription className="text-secondary-foreground pt-1 cursor-help">
                          Excel Format Requirements <Info size={14} className="inline ml-1 align-text-top" />
                       </CardDescription>
-                   </TooltipTrigger>
-                   <TooltipContent className="max-w-xs text-sm" side="bottom" align="start">
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-sm" side="bottom" align="start">
                         <ul className="list-disc space-y-1 pl-4">
                            <li>File must be <strong>.xlsx</strong></li>
                            <li><strong>Col F:</strong> AWB Number (must contain digits).</li>
@@ -1053,9 +1054,18 @@ export default function ReturnVerification() {
                            <li><strong>Col D:</strong> Return Shipping Fee (0 or '0' indicates RTO, others are Customer Return).</li>
                            <li>Other columns like Delivered On are optional but recommended. Dates should be parseable (e.g., YYYY-MM-DD).</li>
                         </ul>
-                   </TooltipContent>
-               </Tooltip>
-           </TooltipProvider>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div>
+              <Link href="/resume" passHref>
+                <Button variant="outline">
+                  <History className="mr-2 h-4 w-4" />
+                  Resume Check
+                </Button>
+              </Link>
+          </div>
         </CardHeader>
         <CardContent className="p-6 space-y-4">
           <label htmlFor="excel-upload" className="block text-sm font-medium text-foreground mb-2">Select Excel File:</label>
@@ -1079,14 +1089,6 @@ export default function ReturnVerification() {
             </p>
           )}
         </CardContent>
-         <CardFooter className="bg-muted/50 p-4 border-t">
-              <Link href="/resume" passHref>
-                <Button variant="outline">
-                  <History className="mr-2 h-4 w-4" />
-                  Resume Check
-                </Button>
-              </Link>
-          </CardFooter>
       </Card>
       
       {/* Verification Card */}
@@ -1211,5 +1213,3 @@ export default function ReturnVerification() {
     </div>
   );
 }
-
-    
