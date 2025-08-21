@@ -1,3 +1,4 @@
+
 // src/components/ResumeVerification.tsx
 "use client";
 
@@ -102,25 +103,40 @@ export default function ResumeVerification() {
         const worksheet = workbook.Sheets[sheetName];
         const jsonData = XLSX.utils.sheet_to_json(worksheet) as any[];
 
-        const expectedHeaders = ['AWB Number', 'Status'];
-        const actualHeaders = Object.keys(jsonData[0] || {});
+        const expectedHeaders = ['awb number', 'status'];
+        const actualHeaders = Object.keys(jsonData[0] || {}).map(h => h.toLowerCase().trim());
         if (!expectedHeaders.every(h => actualHeaders.includes(h))) {
             throw new Error("Invalid report file. It must contain 'AWB Number' and 'Status' columns.");
         }
+        
+        // Find the actual keys used in the file (case-insensitive)
+        const awbKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'awb number') || 'AWB Number';
+        const statusKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'status') || 'Status';
+        const courierKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'courier partner') || 'Courier Partner';
+        const skuKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'sku') || 'SKU';
+        const categoryKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'category') || 'Category';
+        const qtyKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'qty') || 'Qty';
+        const sizeKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'size') || 'Size';
+        const returnTypeKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'return type') || 'Return Type';
+        const suborderIdKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'suborder id') || 'Suborder ID';
+        const returnReasonKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'return reason') || 'Return Reason';
+        const feeKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'return shipping fee') || 'Return Shipping Fee';
+        const deliveredOnKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'delivered on') || 'Delivered On';
+
 
         const extractedData: ReportItem[] = jsonData.map(row => ({
-          awb: String(row['AWB Number'] || ''),
-          courierPartner: String(row['Courier Partner'] || '-'),
-          sku: String(row['SKU'] || '-'),
-          category: String(row['Category'] || '-'),
-          qty: String(row['Qty'] || '-'),
-          size: String(row['Size'] || '-'),
-          returnType: String(row['Return Type'] || '-'),
-          suborderId: String(row['Suborder ID'] || '-'),
-          returnReason: String(row['Return Reason'] || '-'),
-          returnShippingFee: String(row['Return Shipping Fee'] || '-'),
-          deliveredOn: String(row['Delivered On'] || '-'),
-          status: (row['Status'] === 'Done') ? 'Done' : 'Pending',
+          awb: String(row[awbKey] || ''),
+          courierPartner: String(row[courierKey] || '-'),
+          sku: String(row[skuKey] || '-'),
+          category: String(row[categoryKey] || '-'),
+          qty: String(row[qtyKey] || '-'),
+          size: String(row[sizeKey] || '-'),
+          returnType: String(row[returnTypeKey] || '-'),
+          suborderId: String(row[suborderIdKey] || '-'),
+          returnReason: String(row[returnReasonKey] || '-'),
+          returnShippingFee: String(row[feeKey] || '-'),
+          deliveredOn: String(row[deliveredOnKey] || '-'),
+          status: (String(row[statusKey]) === 'Done') ? 'Done' : 'Pending',
         }));
 
         if (extractedData.length === 0) {
@@ -541,3 +557,5 @@ export default function ResumeVerification() {
     </div>
   );
 }
+
+    
