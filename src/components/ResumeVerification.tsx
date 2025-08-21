@@ -286,27 +286,27 @@ export default function ResumeVerification() {
     }
 
     try {
-      // Map data to the desired report format
+      // Map data to the desired report format with consistent, lowercase headers
       const reportData = reportList.map(item => ({
-        'AWB Number': item.awb,
-        'Courier Partner': item.courierPartner || 'Unknown',
-        'SKU': item.sku || '-',
-        'Category': item.category || '-',
-        'Qty': item.qty || '-',
-        'Size': item.size || '-',
-        'Return Type': item.returnType || '-',
-        'Suborder ID': item.suborderId || '-',
-        'Return Reason': item.returnReason || '-',
-        'Return Shipping Fee': item.returnShippingFee || '-',
-        'Delivered On': item.deliveredOn || '-',
-        'Status': item.status,
+        'awb number': item.awb,
+        'courier partner': item.courierPartner || 'Unknown',
+        'sku': item.sku || '-',
+        'category': item.category || '-',
+        'qty': item.qty || '-',
+        'size': item.size || '-',
+        'return type': item.returnType || '-',
+        'suborder id': item.suborderId || '-',
+        'return reason': item.returnReason || '-',
+        'return shipping fee': item.returnShippingFee || '-',
+        'delivered on': item.deliveredOn || '-',
+        'status': item.status,
       }));
 
       const ws = XLSX.utils.json_to_sheet(reportData);
 
       // Apply styling for 'Pending' rows
       const range = XLSX.utils.decode_range(ws['!ref']!);
-      const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'Status');
+      const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'status');
 
       if (statusColumnIndex !== -1) {
         for (let R = range.s.r + 1; R <= range.e.r; ++R) { // Start from 1 (row after header)
@@ -557,5 +557,3 @@ export default function ResumeVerification() {
     </div>
   );
 }
-
-    
