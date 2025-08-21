@@ -298,25 +298,22 @@ export default function ReturnVerification() {
                 let sku = '-';
                 let category = '-';
                 let qty = '-';
-                let size = '-'; // Initialize size to '-'
+                let size = '-';
                 let foundSku = false;
                 let foundCategory = false;
                 let foundQty = false;
                 let foundSize = false;
 
                 for (let rowIdx = shipmentStartRow; rowIdx <= shipmentEndRow; rowIdx++) {
-                    // Use rawJsonData here as well for consistent extraction
                     if (rowIdx >= rawJsonData.length || !rawJsonData[rowIdx]?.[productDetailsColumnIndex]) continue;
 
                     const cellValue = (rawJsonData[rowIdx][productDetailsColumnIndex]?.toString() ?? '').trim();
-                    if (!cellValue) continue; // Skip empty cells
+                    if (!cellValue) continue;
 
                     let extracted;
 
-                    // Only extract if not already found
                     if (!foundSku) {
-                        extracted = extractValue(cellValue, "SKU ID:");
-                        if (!extracted) extracted = extractValue(cellValue, "SKU:");
+                        extracted = extractValue(cellValue, "SKU ID:") || extractValue(cellValue, "SKU:");
                         if (extracted && extracted !== '-') {
                             sku = extracted;
                             foundSku = true;
@@ -332,8 +329,7 @@ export default function ReturnVerification() {
                     }
 
                     if (!foundQty) {
-                        extracted = extractValue(cellValue, "Qty:");
-                        if (!extracted) extracted = extractValue(cellValue, "Quantity:");
+                        extracted = extractValue(cellValue, "Qty:") || extractValue(cellValue, "Quantity:");
                         if (extracted && extracted !== '-') {
                             qty = extracted;
                             foundQty = true;
@@ -344,11 +340,10 @@ export default function ReturnVerification() {
                         extracted = extractValue(cellValue, "Size:");
                         if (extracted && extracted !== '-') {
                             size = extracted;
-                            foundSize = true; // Mark size as found
+                            foundSize = true;
                         }
                     }
 
-                    // Optimization: If all details are found, break early
                     if (foundSku && foundCategory && foundQty && foundSize) break;
                 }
                  // --- End Extraction ---
