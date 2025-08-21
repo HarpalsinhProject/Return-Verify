@@ -268,35 +268,71 @@ export default function ResumeVerification() {
       toast({ title: "No Data", description: "Load a report first.", variant: "destructive" });
       return;
     }
-    const ws = XLSX.utils.json_to_sheet(reportList);
-    const range = XLSX.utils.decode_range(ws['!ref']!);
-    const statusColumnIndex = reportList.length > 0 ? Object.keys(reportList[0]).indexOf('status') : -1;
-    
-    if (statusColumnIndex !== -1) {
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+
+    try {
+      // Map data to the desired report format
+      const reportData = reportList.map(item => ({
+        'AWB Number': item.awb,
+        'Courier Partner': item.courierPartner || 'Unknown',
+        'SKU': item.sku || '-',
+        'Category': item.category || '-',
+        'Qty': item.qty || '-',
+        'Size': item.size || '-',
+        'Return Type': item.returnType || '-',
+        'Suborder ID': item.suborderId || '-',
+        'Return Reason': item.returnReason || '-',
+        'Return Shipping Fee': item.returnShippingFee || '-',
+        'Delivered On': item.deliveredOn || '-',
+        'Status': item.status,
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(reportData);
+
+      // Apply styling for 'Pending' rows
+      const range = XLSX.utils.decode_range(ws['!ref']!);
+      const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'Status');
+
+      if (statusColumnIndex !== -1) {
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) { // Start from 1 (row after header)
           const statusCellAddress = XLSX.utils.encode_cell({ c: statusColumnIndex, r: R });
           const statusCell = ws[statusCellAddress];
           if (statusCell && statusCell.v === 'Pending') {
             for (let C = range.s.c; C <= range.e.c; ++C) {
               const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
               if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
-              ws[cellAddress].s = { fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } };
+              ws[cellAddress].s = {
+                fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } // Red fill
+              };
             }
           }
         }
-    }
-    
-    const colWidths = Object.keys(reportList[0] || {}).map(key => ({
-      wch: Math.max(key.length, ...reportList.map(row => String(row[key as keyof ReportItem] || '').length)) + 2
-    }));
-    ws['!cols'] = colWidths;
+      }
 
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Updated Return Status Report");
-    const dateStr = new Date().toISOString().split('T')[0];
-    XLSX.writeFile(wb, `Updated_Return_Report_${dateStr}.xlsx`);
-    toast({ title: "Report Downloaded", description: "Updated report generated successfully." });
+      // Calculate column widths
+      const colWidths = Object.keys(reportData[0]).map(key => ({
+        wch: Math.max(
+          key.length,
+          ...reportData.map(row => String(row[key as keyof typeof row] || '').length)
+        ) + 2
+      }));
+      ws['!cols'] = colWidths;
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Updated Return Status Report");
+      const dateStr = new Date().toISOString().split('T')[0];
+      XLSX.writeFile(wb, `Updated_Return_Report_${dateStr}.xlsx`);
+      toast({ title: "Report Downloaded", description: "Updated report generated successfully." });
+
+    } catch (error: any) {
+      console.error("Error generating report:", error);
+      toast({
+        title: "Report Generation Error",
+        description: error.message || "An unexpected error occurred.",
+        variant: "destructive"
+      });
+    }
   }, [reportList, toast]);
+
 
   const handleMarkSelectedAsReceived = useCallback(() => {
     if (selectedAwbs.size === 0) return;
@@ -505,5 +541,3 @@ export default function ResumeVerification() {
     </div>
   );
 }
-
-    
