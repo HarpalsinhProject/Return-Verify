@@ -395,7 +395,7 @@ export default function ReturnVerification() {
                      sku: sku, // Use extracted value
                      category: category, // Use extracted value
                      qty: qty, // Use extracted value
-                     size: size, // Use extracted (and de-duplicated) value
+                     size: size, // Use extracted value
                      returnReason: returnReasonValue, // Store extracted Return Reason (Col C)
                      returnShippingFee: shippingFeeValueRaw?.toString() ?? '-', // Store the original fee value from raw data
                      deliveredOn: deliveredOnValue ?? '-', // Store the potentially parsed date or '-'
