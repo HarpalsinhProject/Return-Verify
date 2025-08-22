@@ -106,7 +106,7 @@ export default function ResumeVerification() {
         const expectedHeaders = ['awb number', 'status'];
         const actualHeaders = Object.keys(jsonData[0] || {}).map(h => h.toLowerCase().trim());
         if (!expectedHeaders.every(h => actualHeaders.includes(h))) {
-            throw new Error("Invalid report file. It must contain 'AWB Number' and 'Status' columns.");
+            throw new Error("Invalid report file. It must contain 'awb number' and 'status' columns.");
         }
         
         // Find the actual keys used in the file (case-insensitive)
@@ -136,7 +136,7 @@ export default function ResumeVerification() {
           returnReason: String(row[returnReasonKey] || '-'),
           returnShippingFee: String(row[feeKey] || '-'),
           deliveredOn: String(row[deliveredOnKey] || '-'),
-          status: (String(row[statusKey]) === 'Done') ? 'Done' : 'Pending',
+          status: (String(row[statusKey]).toLowerCase().trim() === 'done') ? 'Done' : 'Pending',
         }));
 
         if (extractedData.length === 0) {
