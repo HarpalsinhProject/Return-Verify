@@ -12,9 +12,10 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Home, History } from "lucide-react";
+import { Upload, CheckCircle, XCircle, AlertTriangle, ScanLine, FileText, Truck, Download, Package, Info, FileSpreadsheet, Home, History, Filter } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 interface ReportItem {
@@ -72,6 +73,11 @@ export default function ResumeVerification() {
   const clearInputTimerRef = useRef<NodeJS.Timeout | null>(null);
   const awbInputRef = useRef<HTMLInputElement>(null);
   const [selectedAwbs, setSelectedAwbs] = useState<Set<string>>(new Set());
+    const [filters, setFilters] = useState({
+      courierPartner: new Set<string>(),
+      returnType: new Set<string>(),
+      deliveredOn: new Set<string>(),
+    });
 
   useEffect(() => {
     return () => {
@@ -91,6 +97,12 @@ export default function ResumeVerification() {
     setVerificationStatus('idle');
     setVerificationMessage(null);
     setSelectedAwbs(new Set());
+    setFilters({
+        courierPartner: new Set(),
+        returnType: new Set(),
+        deliveredOn: new Set(),
+    });
+
 
     setFileName(file.name);
     const reader = new FileReader();
@@ -276,7 +288,22 @@ export default function ResumeVerification() {
     }
   };
 
-  const pendingAwbs = useMemo(() => reportList.filter(item => item.status === 'Pending'), [reportList]);
+  const pendingAwbs = useMemo(() => {
+    return reportList.filter((item) => {
+        if (item.status !== 'Pending') return false;
+
+        const f = filters;
+        const checkSet = (value: string | undefined, filterSet: Set<string>) =>
+            filterSet.size === 0 || (value && filterSet.has(value));
+
+        return (
+            checkSet(item.courierPartner, f.courierPartner) &&
+            checkSet(item.returnType, f.returnType) &&
+            checkSet(item.deliveredOn, f.deliveredOn)
+        );
+    });
+  }, [reportList, filters]);
+
   const receivedCount = useMemo(() => reportList.filter(item => item.status === 'Done').length, [reportList]);
 
   const handleDownloadReport = useCallback(() => {
@@ -363,6 +390,22 @@ export default function ResumeVerification() {
     setSelectedAwbs(new Set());
   }, [reportList, selectedAwbs, toast]);
 
+    const handleCheckboxFilterChange = (
+      column: 'courierPartner' | 'returnType' | 'deliveredOn',
+      value: string,
+      checked: boolean
+    ) => {
+        setFilters(prev => {
+            const newSet = new Set(prev[column]);
+            if (checked) {
+                newSet.add(value);
+            } else {
+                newSet.delete(value);
+            }
+            return { ...prev, [column]: newSet };
+        });
+    };
+
     const missingAwbsTable = useMemo(() => {
         if (reportList.length > 0 && pendingAwbs.length === 0) {
              return (
@@ -398,6 +441,44 @@ export default function ResumeVerification() {
         const isAllSelected = selectedAwbs.size > 0 && selectedAwbs.size === pendingAwbs.length;
         const isPartiallySelected = selectedAwbs.size > 0 && selectedAwbs.size < pendingAwbs.length;
 
+        const FilterPopover = ({ column, title }: { column: 'courierPartner' | 'returnType' | 'deliveredOn', title: string }) => {
+            const options = useMemo(() => {
+                const uniqueValues = new Set(reportList.filter(i => i.status === 'Pending').map(item => item[column] || 'Unknown'));
+                return Array.from(uniqueValues).sort();
+            }, [column, reportList]);
+
+            const activeFilters = filters[column];
+
+            return (
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="ghost" size="sm" className={cn("h-8 ml-2 p-1", activeFilters.size > 0 && "text-accent")}>
+                           <Filter className="h-4 w-4" />
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-0" align="start">
+                        <div className="p-2 font-bold border-b">{title}</div>
+                        <ScrollArea className="max-h-[200px]">
+                          <div className="p-2 space-y-2">
+                            {options.map(option => (
+                                <div key={option} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`${column}-${option}`}
+                                        checked={activeFilters.has(option)}
+                                        onCheckedChange={(checked) => handleCheckboxFilterChange(column, option, !!checked)}
+                                    />
+                                    <label htmlFor={`${column}-${option}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                        {option}
+                                    </label>
+                                </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                    </PopoverContent>
+                </Popover>
+            );
+        };
+
         return (
             <ScrollArea className="h-[450px] border-t whitespace-nowrap" orientation="both">
                 <Table>
@@ -410,10 +491,11 @@ export default function ResumeVerification() {
                             />
                         </TableHead>
                         <TableHead>AWB Number</TableHead>
-                        <TableHead>Courier</TableHead>
+                        <TableHead><div className="flex items-center">Courier<FilterPopover column="courierPartner" title="Filter by Courier"/></div></TableHead>
                         <TableHead>Product Details</TableHead>
                         <TableHead>Return Reason</TableHead>
-                        <TableHead>Return Type</TableHead>
+                        <TableHead><div className="flex items-center">Return Type<FilterPopover column="returnType" title="Filter by Return Type"/></div></TableHead>
+                        <TableHead><div className="flex items-center">Delivered On<FilterPopover column="deliveredOn" title="Filter by Delivered On"/></div></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -434,6 +516,7 @@ export default function ResumeVerification() {
                             </TableCell>
                             <TableCell className={cn(highlightReason && "font-bold text-destructive")}>{item.returnReason}</TableCell>
                             <TableCell>{item.returnType}</TableCell>
+                            <TableCell>{item.deliveredOn}</TableCell>
                             </TableRow>
                          );
                        })}
@@ -442,7 +525,7 @@ export default function ResumeVerification() {
                 <ScrollBar orientation="horizontal" />
             </ScrollArea>
         );
-    }, [pendingAwbs, selectedAwbs, reportList]);
+    }, [pendingAwbs, selectedAwbs, reportList, filters]);
 
 
   return (

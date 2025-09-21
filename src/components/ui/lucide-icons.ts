@@ -12,7 +12,8 @@ export {
   Info,
   FileSpreadsheet,
   History,
-  Home
+  Home,
+  Filter
 } from 'lucide-react';
 
     
