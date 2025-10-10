@@ -121,7 +121,6 @@ export default function ResumeVerification() {
             throw new Error("Invalid report file. It must contain 'awb number' and 'status' columns.");
         }
         
-        // Find the actual keys used in the file (case-insensitive)
         const awbKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'awb number') || 'AWB Number';
         const statusKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'status') || 'Status';
         const courierKey = Object.keys(jsonData[0]).find(k => k.toLowerCase().trim() === 'courier partner') || 'Courier Partner';
@@ -313,7 +312,6 @@ export default function ResumeVerification() {
     }
 
     try {
-      // Map data to the desired report format with consistent, lowercase headers
       const reportData = reportList.map(item => ({
         'awb number': item.awb,
         'courier partner': item.courierPartner || 'Unknown',
@@ -331,12 +329,11 @@ export default function ResumeVerification() {
 
       const ws = XLSX.utils.json_to_sheet(reportData);
 
-      // Apply styling for 'Pending' rows
       const range = XLSX.utils.decode_range(ws['!ref']!);
       const statusColumnIndex = Object.keys(reportData[0]).findIndex(key => key === 'status');
 
       if (statusColumnIndex !== -1) {
-        for (let R = range.s.r + 1; R <= range.e.r; ++R) { // Start from 1 (row after header)
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) { 
           const statusCellAddress = XLSX.utils.encode_cell({ c: statusColumnIndex, r: R });
           const statusCell = ws[statusCellAddress];
           if (statusCell && statusCell.v === 'Pending') {
@@ -344,14 +341,13 @@ export default function ResumeVerification() {
               const cellAddress = XLSX.utils.encode_cell({ c: C, r: R });
               if (!ws[cellAddress]) ws[cellAddress] = { t: 's', v: '' };
               ws[cellAddress].s = {
-                fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } // Red fill
+                fill: { patternType: "solid", fgColor: { rgb: "FFFF0000" } } 
               };
             }
           }
         }
       }
 
-      // Calculate column widths
       const colWidths = Object.keys(reportData[0]).map(key => ({
         wch: Math.max(
           key.length,
@@ -480,7 +476,7 @@ export default function ResumeVerification() {
         };
 
         return (
-            <ScrollArea className="h-[450px] border-t whitespace-nowrap" orientation="both">
+            <ScrollArea className="h-[450px] border-t" orientation="both">
                 <Table>
                     <TableHeader className="sticky top-0 bg-muted z-10 shadow-sm">
                       <TableRow>
@@ -508,15 +504,15 @@ export default function ResumeVerification() {
                             <TableCell>
                                 <Checkbox checked={isSelected} onCheckedChange={(checked) => handleSelect(item.awb, !!checked)} />
                             </TableCell>
-                            <TableCell className="font-medium">{item.awb}</TableCell>
-                            <TableCell>{item.courierPartner}</TableCell>
-                            <TableCell className="text-xs">
+                            <TableCell className="font-medium whitespace-normal break-words">{item.awb}</TableCell>
+                            <TableCell className="whitespace-normal break-words">{item.courierPartner}</TableCell>
+                            <TableCell className="text-xs whitespace-normal break-words">
                                 <div>SKU: {item.sku}</div>
                                 <div><span className={cn(highlightQty && "font-bold text-destructive")}>Qty: {item.qty}</span> | Size: {item.size}</div>
                             </TableCell>
-                            <TableCell className={cn(highlightReason && "font-bold text-destructive")}>{item.returnReason}</TableCell>
-                            <TableCell>{item.returnType}</TableCell>
-                            <TableCell>{item.deliveredOn}</TableCell>
+                            <TableCell className={cn("whitespace-normal break-words", highlightReason && "font-bold text-destructive")}>{item.returnReason}</TableCell>
+                            <TableCell className="whitespace-normal break-words">{item.returnType}</TableCell>
+                            <TableCell className="whitespace-normal break-words">{item.deliveredOn}</TableCell>
                             </TableRow>
                          );
                        })}
@@ -529,25 +525,25 @@ export default function ResumeVerification() {
 
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-8">
-        <header className="text-center mb-8 relative">
+    <div className="container mx-auto p-4 md:p-6 space-y-6">
+        <header className="text-center mb-6 relative">
             <Link href="/" passHref>
                 <Button variant="outline" size="icon" className="absolute left-0 top-1/2 -translate-y-1/2">
                     <Home className="h-4 w-4" />
                 </Button>
             </Link>
-            <h1 className="text-3xl font-bold text-primary">Resume Verification</h1>
-            <p className="text-muted-foreground mt-1">Upload a generated report to continue where you left off.</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-primary">Resume Verification</h1>
+            <p className="text-muted-foreground mt-1 text-sm md:text-base">Upload a generated report to continue where you left off.</p>
         </header>
 
       <Card className="shadow-lg rounded-lg overflow-hidden">
-        <CardHeader className="bg-secondary">
-          <CardTitle className="text-xl md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
-            <History className="h-6 w-6" /> Upload Verification Report
+        <CardHeader className="bg-secondary p-4 md:p-6">
+          <CardTitle className="text-lg md:text-2xl font-semibold text-secondary-foreground flex items-center gap-3">
+            <History className="h-5 w-5 md:h-6 md:w-6" /> Upload Verification Report
           </CardTitle>
-          <CardDescription className="text-secondary-foreground pt-1">Select the .xlsx report file previously generated by this tool.</CardDescription>
+          <CardDescription className="text-secondary-foreground pt-1 text-sm">Select the .xlsx report file previously generated by this tool.</CardDescription>
         </CardHeader>
-        <CardContent className="p-6">
+        <CardContent className="p-4 md:p-6">
           <Input
             id="report-upload"
             type="file"
@@ -573,12 +569,12 @@ export default function ResumeVerification() {
       {reportList.length > 0 && (
         <>
         <Card className="shadow-lg rounded-lg overflow-hidden">
-          <CardHeader>
-            <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3">
-               <ScanLine className="h-6 w-6" /> Verify Received AWBs
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-lg md:text-2xl font-semibold flex items-center gap-3">
+               <ScanLine className="h-5 w-5 md:h-6 md:w-6" /> Verify Received AWBs
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6 space-y-4">
+          <CardContent className="p-4 md:p-6 space-y-4">
              <label htmlFor="awb-input" className="block text-sm font-medium text-foreground mb-2">Enter AWB Number:</label>
             <Input
               id="awb-input"
@@ -599,8 +595,8 @@ export default function ResumeVerification() {
                  </Alert>
              )}
           </CardContent>
-           <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center">
-             <p className="text-sm text-muted-foreground">
+           <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-between items-center gap-2">
+             <p className="text-sm text-muted-foreground text-center sm:text-left">
                  {receivedCount} of {reportList.length} total items marked as Done.
              </p>
               <Button onClick={handleDownloadReport} variant="outline" size="sm">
@@ -611,17 +607,17 @@ export default function ResumeVerification() {
         </Card>
 
         <Card className="shadow-lg rounded-lg overflow-hidden">
-          <CardHeader className="bg-destructive/10 dark:bg-destructive/20">
-             <CardTitle className="text-xl md:text-2xl font-semibold flex items-center gap-3 text-destructive">
-               <AlertTriangle className="h-6 w-6" /> Pending Items ({pendingAwbs.length})
+          <CardHeader className="bg-destructive/10 dark:bg-destructive/20 p-4 md:p-6">
+             <CardTitle className="text-lg md:text-2xl font-semibold flex items-center gap-3 text-destructive">
+               <AlertTriangle className="h-5 w-5 md:h-6 md:w-6" /> Pending Items ({pendingAwbs.length})
              </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             {missingAwbsTable}
           </CardContent>
            {pendingAwbs.length > 0 && (
-             <CardFooter className="bg-muted/50 p-4 border-t flex justify-between items-center">
-                <div>
+             <CardFooter className="bg-muted/50 p-4 border-t flex flex-col sm:flex-row justify-between items-center gap-2">
+                <div className="text-center sm:text-left">
                    {selectedAwbs.size > 0 && (
                      <p className="text-sm text-destructive font-medium">{selectedAwbs.size} item(s) selected.</p>
                    )}
