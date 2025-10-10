@@ -942,7 +942,8 @@ setVerificationMessage(null);
 
 
   return (
-    <div className="container mx-auto p-4 md:p-6 space-y-6">
+    <div className="container mx-auto p-4 md:p-6 flex flex-col min-h-full">
+      <div className="flex-grow space-y-6">
         <header className="text-center mb-6">
             <h1 className="text-2xl md:text-3xl font-bold text-primary">ReturnVerify</h1>
             <p className="text-muted-foreground mt-1 text-sm md:text-base">Streamline your ecommerce return verification process.</p>
@@ -1131,6 +1132,9 @@ setVerificationMessage(null);
            )}
         </Card>
       )}
+      </div>
     </div>
   );
 }
+
+    

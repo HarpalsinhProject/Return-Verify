@@ -525,7 +525,8 @@ export default function ResumeVerification() {
 
 
   return (
-    <div className="container mx-auto p-4 md:p-6 space-y-6">
+    <div className="container mx-auto p-4 md:p-6 flex flex-col min-h-full">
+      <div className="flex-grow space-y-6">
         <header className="text-center mb-6 relative">
             <Link href="/" passHref>
                 <Button variant="outline" size="icon" className="absolute left-0 top-1/2 -translate-y-1/2">
@@ -633,6 +634,9 @@ export default function ResumeVerification() {
         </Card>
         </>
       )}
+      </div>
     </div>
   );
 }
+
+    
