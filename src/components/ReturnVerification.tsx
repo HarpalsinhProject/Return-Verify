@@ -946,7 +946,7 @@ setVerificationMessage(null);
       <div className="flex-grow space-y-6">
         <header className="text-center mb-6">
             <h1 className="text-2xl md:text-3xl font-bold text-primary">ReturnVerify</h1>
-            <p className="text-muted-foreground mt-1 text-sm md:text-base">Streamline your ecommerce return verification process.</p>
+            <p className="text-muted-foreground mt-1 text-sm md:text-base">Streamline your meshoo return verification process.</p>
         </header>
 
       <Card className="shadow-lg rounded-lg overflow-hidden">
@@ -1136,5 +1136,3 @@ setVerificationMessage(null);
     </div>
   );
 }
-
-    
