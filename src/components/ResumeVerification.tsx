@@ -527,14 +527,19 @@ export default function ResumeVerification() {
   return (
     <div className="container mx-auto p-4 md:p-6 flex flex-col min-h-full">
       <div className="flex-grow space-y-6">
-        <header className="text-center mb-6 relative">
-            <Link href="/" passHref>
-                <Button variant="outline" size="icon" className="absolute left-0 top-1/2 -translate-y-1/2">
-                    <Home className="h-4 w-4" />
-                </Button>
-            </Link>
-            <h1 className="text-2xl md:text-3xl font-bold text-primary">Resume Verification</h1>
-            <p className="text-muted-foreground mt-1 text-sm md:text-base">Upload a generated report to continue where you left off.</p>
+        <header className="flex items-center justify-between mb-6">
+            <div className="flex-1">
+                <Link href="/" passHref>
+                    <Button variant="outline" size="icon">
+                        <Home className="h-4 w-4" />
+                    </Button>
+                </Link>
+            </div>
+            <div className="flex-1 text-center">
+                <h1 className="text-2xl md:text-3xl font-bold text-primary">Resume Verification</h1>
+                <p className="text-muted-foreground mt-1 text-sm md:text-base">Upload a generated report to continue where you left off.</p>
+            </div>
+            <div className="flex-1" />
         </header>
 
       <Card className="shadow-lg rounded-lg overflow-hidden">
@@ -638,5 +643,3 @@ export default function ResumeVerification() {
     </div>
   );
 }
-
-    
